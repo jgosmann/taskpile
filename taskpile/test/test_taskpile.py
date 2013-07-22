@@ -229,7 +229,7 @@ class TestTaskpile(object):
     def test_start_up_to_max_parallel_tasks_on(self):
         num_more = 2
         tasks = [self._create_mocktask_in_state(State.PENDING)
-                 for i in xrange(self.taskpile.max_parallel + num_more)]
+                 for i in range(self.taskpile.max_parallel + num_more)]
         for task in tasks:
             self.taskpile.enqueue(task)
         self.taskpile.update()
@@ -240,7 +240,7 @@ class TestTaskpile(object):
 
     def test_starts_all_tasks_if_less_then_max(self):
         tasks = [self._create_mocktask_in_state(State.PENDING)
-                 for i in max(1, xrange(self.taskpile.max_parallel - 1))]
+                 for i in range(max(1, self.taskpile.max_parallel - 1))]
         for task in tasks:
             self.taskpile.enqueue(task)
         self.taskpile.update()
@@ -250,7 +250,7 @@ class TestTaskpile(object):
     def test_starts_tasks_later_added_but_at_most_max_parallel(self):
         num_more = 2
         tasks = [self._create_mocktask_in_state(State.PENDING)
-                 for i in xrange(self.taskpile.max_parallel + num_more)]
+                 for i in range(self.taskpile.max_parallel + num_more)]
         self.taskpile.enqueue(tasks[0])
         self.taskpile.update()
         for task in tasks[1:]:
@@ -264,7 +264,7 @@ class TestTaskpile(object):
     def test_stop_newest_process_on_reducing_max_parallel(self):
         self.taskpile.max_parallel = 2
         tasks = [self._create_mocktask_in_state(State.PENDING)
-                 for i in xrange(2)]
+                 for i in range(2)]
         for task in tasks:
             self.taskpile.enqueue(task)
         self.taskpile.update()
@@ -282,13 +282,13 @@ class TestTaskpile(object):
 
     def test_update_sorts_queues(self):
         pending_tasks = [self._create_mocktask_in_state(State.PENDING)
-                         for i in xrange(2)]
+                         for i in range(2)]
         running_tasks = [self._create_mocktask_in_state(State.RUNNING)
-                         for i in xrange(2)]
+                         for i in range(2)]
         stopped_tasks = [self._create_mocktask_in_state(State.STOPPED)
-                         for i in xrange(2)]
+                         for i in range(2)]
         finished_tasks = [self._create_mocktask_in_state(State.FINISHED)
-                          for i in xrange(2)]
+                          for i in range(2)]
         self.taskpile.pending = [pending_tasks[0], running_tasks[0],
                                  stopped_tasks[0], finished_tasks[0]]
         self.taskpile.running = [pending_tasks[1], running_tasks[1],
