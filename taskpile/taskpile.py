@@ -1,8 +1,7 @@
 import patch_multiprocessing
-from multiprocessing import Manager, Process, Value
+from multiprocessing import Process, Value
 import os
 import signal
-import time
 
 
 assert patch_multiprocessing  # suppress unused warning
@@ -13,6 +12,10 @@ class State(object):
     RUNNING = 1
     FINISHED = 2
     STOPPED = 3
+
+    @staticmethod
+    def is_valid_state(state):
+        return 0 <= state and state < 4
 
 
 class Task(object):
@@ -62,57 +65,47 @@ class Task(object):
         self._state.value = State.FINISHED
 
 
-class QueueManager(object):
-    def __init__(self):
-        self._data_manager = Manager()
-        self.pending = self._data_manager.list()
-        self.running = self._data_manager.list()
-        self.finished = self._data_manager.list()
+class Taskpile(object):
+    def __init__(self, max_parallel=1):
+        self.pending = []
+        self.running = []
+        self.finished = []
+        self.max_parallel = max_parallel
 
     def enqueue(self, task):
         self.pending.append(task)
 
-    def start_next(self):
-        try:
-            task = self.pending.pop()
-            task.start()
+    def update(self):
+        self._update_queues()
+        self._manage_tasks()
+
+    def _update_queues(self):
+        pending = []
+        running = []
+        stopped = []
+        for task in self.pending + self.running:
+            state = int(task.state)
+            assert State.is_valid_state(state)
+            if state == State.PENDING:
+                pending.append(task)
+            elif state == State.RUNNING:
+                running.append(task)
+            elif state == State.FINISHED:
+                self.finished.append(task)
+            elif state == State.STOPPED:
+                stopped.append(task)
+        self.pending = stopped + pending
+        self.running = running
+
+    def _manage_tasks(self):
+        while len(self.running) > self.max_parallel:
+            task = self.running.pop()
+            task.stop()
+            self.pending.insert(0, task)
+        while len(self.pending) > 0 and len(self.running) < self.max_parallel:
+            task = self.pending.pop(0)
+            if task.state == State.STOPPED:
+                task.cont()
+            else:
+                task.start()
             self.running.append(task)
-        except IndexError:
-            raise self.Empty()
-
-    class Empty(Exception):
-        pass
-
-
-class TaskManager(object):
-    pass
-
-
-class Taskpile(object):
-    pass
-    #def __init__(self, task_manager=TaskManager()):
-        #self.queues = QueueManager()
-        ##self._task_manager = Process(
-            ##target=self._manage_tasks, args=(self.queues,))
-        ##self._task_manager.start()
-
-    #def enqueue(self, task_function):
-        #self.queues.enqueue(Task(task_function))
-
-    #@staticmethod
-    #def _manage_tasks(queue_manager):
-        #while True:
-            #try:
-                #queue_manager.start_next()
-            #except QueueManager.Empty:
-                #time.sleep(1)
-
-        #while not exit_event.is_set():
-            #try:
-                #task = .pop()
-                #task.start()
-                ## TODO finished
-            #except Queue.Empty:
-                #pass
-            #notifier.wait()
-            #notifier.clear()

@@ -1,23 +1,17 @@
-from contextlib import contextmanager
 from functools import wraps
-import logging
 from multiprocessing import Pipe, Process
 from multiprocessing.reduction import reduce_connection
 import pickle
-import sys
 import time
 
 from hamcrest import assert_that, contains, described_as, \
-    greater_than_or_equal_to, is_, is_not, less_than
-from nose.tools import istest, raises, timed
+    greater_than_or_equal_to, is_, is_not
 try:
     from unittest.mock import patch, MagicMock
 except:
     from mock import patch, MagicMock
 
-from matcher import class_with, empty
-
-from taskpile import QueueManager, State, Task, Taskpile
+from taskpile import State, Task, Taskpile
 
 
 def run_in_process(connection, function, *args, **kwargs):
@@ -94,6 +88,24 @@ class DummyTaskController(object):
     def finish(self):
         self.__parent_pipe.send('arbitrary data to cause exit')
         self.__parent_pipe.close()
+
+
+class MockTask(MagicMock):
+    instances_created = 0
+
+    def __init__(self, mock_id=None):
+        MagicMock.__init__(self)
+        if mock_id is None:
+            self.id = self.instances_created
+            self.instances_created += 1
+        else:
+            self.id = mock_id
+
+        self.__eq__ = lambda self, other: self.id == other.id
+        self.__reduce__ = lambda self: (MockTask, (self.id,))
+
+    def _get_child_mock(self, **kwargs):
+        return MagicMock(**kwargs)
 
 
 class TestTask(object):
@@ -211,61 +223,98 @@ class TestTask(object):
         assert_that(task.name, is_(the_name))
 
 
-#class TestQueueManager(object):
-    #def setUp(self):
-        #self.queues = QueueManager()
+class TestTaskpile(object):
+    def setUp(self):
+        self.taskpile = Taskpile()
 
-    #def test_queues_are_initially_empty(self):
-        #assert_that(self.queues.pending, is_(empty()))
-        #assert_that(self.queues.running, is_(empty()))
-        #assert_that(self.queues.finished, is_(empty()))
+    @staticmethod
+    def _create_mocktask_in_state(state):
 
-    #def test_can_enque_to_pending_queue(self):
-        #task = Task(noop)
-        #self.queues.enqueue(task)
-        #assert_that(
-            #self.queues.pending,
-            #contains(class_with(function=noop, state=State.PENDING)))
+        task = MagicMock(spec=Task)
+        task.state = state
 
-    #@raises(QueueManager.Empty)
-    #def test_starting_next_task_raises_exception_if_none_is_pending(self):
-        #self.queues.start_next()
+        def start():
+            task.state = State.RUNNING
 
-    #def test_can_start_next_task(self):
-        #task_ctrl = DummyTaskController()
-        #self.queues.enqueue(task_ctrl.create_task())
-        #try:
-            #self.queues.start_next()
-            #timeout = 5
-            #assert_that(
-                #task_ctrl.is_started(timeout), described_as(
-                    #'Task started in %0 seconds.', is_(True), timeout))
-            #assert_that(self.queues.pending, is_(empty()))
-            #assert_that(
-                #self.queues.running, contains(class_with(state=State.RUNNING)))
-        #finally:
-            #task_ctrl.finish()
+        task.start.side_effect = start
+        return task
 
-    # update on finish
-    # remove from finish, running, pending
-    # pause
+    def test_can_add_task(self):
+        task = Task(noop)
+        self.taskpile.enqueue(task)
+        assert_that(self.taskpile.pending, contains(task))
 
+    def test_start_up_to_max_parallel_tasks_on(self):
+        num_more = 2
+        tasks = [self._create_mocktask_in_state(State.PENDING)
+                 for i in xrange(self.taskpile.max_parallel + num_more)]
+        for task in tasks:
+            self.taskpile.enqueue(task)
+        self.taskpile.update()
+        for task in tasks[:-num_more]:
+            task.start.assert_called_once_with()
+        for task in tasks[-num_more:]:
+            assert_that(task.start.called, is_(False))
 
-#class TestTaskpile(object):
-    #def setUp(self):
-        #task_manager = MagicMock()
-        #self.taskpile = Taskpile(task_manager)
+    def test_starts_all_tasks_if_less_then_max(self):
+        tasks = [self._create_mocktask_in_state(State.PENDING)
+                 for i in max(1, xrange(self.taskpile.max_parallel - 1))]
+        for task in tasks:
+            self.taskpile.enqueue(task)
+        self.taskpile.update()
+        for task in tasks:
+            task.start.assert_called_once_with()
 
-    #def test_can_add_task(self):
-        #self.taskpile.enqueue(dummy_task)
-        #assert_that(
-            #self.taskpile.queues.pending,
-            #contains(has_property('state', State.PENDING)))
+    def test_starts_tasks_later_added_but_at_most_max_parallel(self):
+        num_more = 2
+        tasks = [self._create_mocktask_in_state(State.PENDING)
+                 for i in xrange(self.taskpile.max_parallel + num_more)]
+        self.taskpile.enqueue(tasks[0])
+        self.taskpile.update()
+        for task in tasks[1:]:
+            self.taskpile.enqueue(task)
+        self.taskpile.update()
+        for task in tasks[:-num_more]:
+            task.start.assert_called_once_with()
+        for task in tasks[-num_more:]:
+            assert_that(task.start.called, is_(False))
 
-    #def test_tast_state_changes_to_finished(self):
-        #task = DummyTask()
-        #self.taskpile.enqueue(task)
-        #task.finish()
-        #assert_that(
-            #self.taskpile.queue,
-            #contains(has_property('state', State.FINISHED)))
+    def test_stop_newest_process_on_reducing_max_parallel(self):
+        self.taskpile.max_parallel = 2
+        tasks = [self._create_mocktask_in_state(State.PENDING)
+                 for i in xrange(2)]
+        for task in tasks:
+            self.taskpile.enqueue(task)
+        self.taskpile.update()
+        self.taskpile.max_parallel = 1
+        self.taskpile.update()
+        tasks[1].stop.assert_called_once_with()
+        assert_that(tasks[0].stop.called, is_(False))
+
+    def test_continues_an_already_started_process(self):
+        task = self._create_mocktask_in_state(State.STOPPED)
+        self.taskpile.enqueue(task)
+        self.taskpile.update()
+        assert_that(task.start.called, is_(False))
+        task.cont.assert_called_once_with()
+
+    def test_update_sorts_queues(self):
+        pending_tasks = [self._create_mocktask_in_state(State.PENDING)
+                         for i in xrange(2)]
+        running_tasks = [self._create_mocktask_in_state(State.RUNNING)
+                         for i in xrange(2)]
+        stopped_tasks = [self._create_mocktask_in_state(State.STOPPED)
+                         for i in xrange(2)]
+        finished_tasks = [self._create_mocktask_in_state(State.FINISHED)
+                          for i in xrange(2)]
+        self.taskpile.pending = [pending_tasks[0], running_tasks[0],
+                                 stopped_tasks[0], finished_tasks[0]]
+        self.taskpile.running = [pending_tasks[1], running_tasks[1],
+                                 stopped_tasks[1], finished_tasks[1]]
+        self.taskpile.max_parallel = len(running_tasks)
+        self.taskpile.update()
+
+        assert_that(
+            self.taskpile.pending, contains(*stopped_tasks + pending_tasks))
+        assert_that(self.taskpile.running, contains(*running_tasks))
+        assert_that(self.taskpile.finished, contains(*finished_tasks))
