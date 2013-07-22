@@ -90,24 +90,6 @@ class DummyTaskController(object):
         self.__parent_pipe.close()
 
 
-class MockTask(MagicMock):
-    instances_created = 0
-
-    def __init__(self, mock_id=None):
-        MagicMock.__init__(self)
-        if mock_id is None:
-            self.id = self.instances_created
-            self.instances_created += 1
-        else:
-            self.id = mock_id
-
-        self.__eq__ = lambda self, other: self.id == other.id
-        self.__reduce__ = lambda self: (MockTask, (self.id,))
-
-    def _get_child_mock(self, **kwargs):
-        return MagicMock(**kwargs)
-
-
 class TestTask(object):
     def test_is_initially_pending(self):
         task = Task(noop)
