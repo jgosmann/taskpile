@@ -2,6 +2,7 @@ import patch_multiprocessing
 from multiprocessing import Process, Value
 import os
 import signal
+import sys
 
 
 assert patch_multiprocessing  # suppress unused warning
@@ -18,7 +19,6 @@ class State(object):
         return 0 <= state and state < 4
 
 
-# FIXME test for kwargs
 class Task(object):
     def __init__(self, function, args=(), kwargs={}, name=None):
         self.function = function
@@ -29,10 +29,12 @@ class Task(object):
         else:
             self.name = name
         self._exitcode = None
+        self._exitsignal = None
         self._pid = None
         self._state = Value('H', State.PENDING)
 
     exitcode = property(lambda self: self._exitcode)
+    exitsignal = property(lambda self: self._exitsignal)
     pid = property(lambda self: self._pid)
     state = property(lambda self: self._state.value)
 
@@ -48,9 +50,14 @@ class Task(object):
     def __run(state_var, function, *args, **kwargs):
         state_var.value = State.RUNNING
         try:
-            function(*args, **kwargs)
+            retval = function(*args, **kwargs)
+            try:
+                exitcode = int(retval)
+            except:
+                exitcode = 0
         finally:
             state_var.value = State.FINISHED
+        sys.exit(exitcode)
 
     def stop(self):
         os.kill(self.pid, signal.SIGSTOP)
@@ -61,7 +68,9 @@ class Task(object):
         self._state.value = State.RUNNING
 
     def join(self):
-        opid, self._exitcode = os.waitpid(self.pid, 0)
+        opid, exit_status_indication = os.waitpid(self.pid, 0)
+        self._exitsignal = exit_status_indication & 0xff
+        self._exitcode = exit_status_indication >> 8
 
     def terminate(self):
         os.kill(self.pid, signal.SIGTERM)

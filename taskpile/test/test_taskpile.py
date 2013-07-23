@@ -5,7 +5,7 @@ import pickle
 import time
 
 from hamcrest import assert_that, contains, described_as, \
-    greater_than_or_equal_to, is_, is_not
+    greater_than_or_equal_to, has_entries, is_, is_not
 try:
     from unittest.mock import patch, MagicMock
 except:
@@ -96,9 +96,10 @@ class TestTask(object):
         assert_that(task.state, is_(State.PENDING))
 
     def test_stores_function_and_args(self):
-        task = Task(noop, (1, 2))
+        task = Task(noop, (1, 2), kwargs={'key': 3})
         assert_that(task.function, is_(noop))
         assert_that(task.args, contains(1, 2))
+        assert_that(task.kwargs, has_entries({'key': 3}))
 
     def test_pid_is_initially_none(self):
         task = Task(noop)
@@ -118,6 +119,30 @@ class TestTask(object):
             assert_that(task.state, is_(State.RUNNING))
         finally:
             task_ctrl.finish()
+
+    @timelimit(1)
+    def test_stores_integer_return_value_of_function_as_exitcode(self):
+        def check_args():
+            return 42
+
+        task = Task(check_args)
+        task.start()
+        task.join()
+        assert_that(task.exitcode, is_(42))
+
+    @timelimit(1)
+    def test_start_passes_args_to_task(self):
+        def check_args(one, two, key):
+            if one == 1 and two == 2 and key == 3:
+                return 0
+            else:
+                return -1
+
+        task = Task(check_args, (1, 2), kwargs={'key': 3})
+        task.start()
+        task.join()
+        assert_that(task.exitcode, described_as(
+            'correct arguments were passed to function', is_(0)))
 
     @timelimit(1)
     def test_updates_state_after_finishing(self):
@@ -161,7 +186,7 @@ class TestTask(object):
         task.terminate()
         task.join()
         assert_that(task.state, is_(State.FINISHED))
-        assert_that(task.exitcode, is_not(0))
+        assert_that(task.exitsignal, is_not(0))
 
     @timelimit(1)
     def test_can_stop_and_continue_task(self):
