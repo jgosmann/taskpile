@@ -1,5 +1,6 @@
 import urwid
 
+from taskpile import State, Task, Taskpile
 
 
 def tabbed_focus(cls):
@@ -119,25 +120,61 @@ class NewTaskDialog(Dialog):
         Dialog.__init__(self, parent, NewTaskInputs())
 
 
+class TaskView(urwid.Columns):
+    state_indicators = {
+        State.PENDING: ' ',
+        State.RUNNING: 'R',
+        State.FINISHED: 'F',
+        State.STOPPED: 'S'
+    }
+
+    def __init__(self, task):
+        self.task = task
+        self.state = urwid.Text(
+            self.state_indicators[self.task.state], wrap='clip')
+        self.pid = urwid.Text(str(self.task.pid), 'right', wrap='clip')
+        self.name = urwid.Text(self.task.name, wrap='clip')
+        super(TaskView, self).__init__([
+            (6, self.pid), (1, self.state), self.name], 1)
+
+    def selectable(self):
+        return True
+
+
+class TaskList(urwid.ListBox):
+    def __init__(self, taskpile):
+        self.taskpile = taskpile
+        super(TaskList, self).__init__(urwid.SimpleFocusListWalker([]))
+
+    def update(self):
+        self.taskpile.update()
+        tasks = self.taskpile.running + self.taskpile.pending + \
+            self.taskpile.finished
+        self.body[:] = [TaskView(t) for t in tasks]
+
+
 class MainWindow(urwid.WidgetPlaceholder):
     def __init__(self):
+        self.taskpile = Taskpile()
+
+        self.tasklist = TaskList(self.taskpile)
         add_task_btn = urwid.Button("Add task ...")
         exit_btn = urwid.Button("Exit")
-        self.exit_btn = exit_btn
 
         urwid.connect_signal(
             add_task_btn, 'click', self.on_add_task_btn_clicked)
         urwid.connect_signal(exit_btn, 'click', self.on_exit_btn_clicked)
 
         urwid.WidgetPlaceholder.__init__(self, urwid.Pile([
-            urwid.LineBox(urwid.Filler(urwid.Text("Task list"))),
+            urwid.LineBox(urwid.Padding(self.tasklist, left=1, right=1)),
             ('pack', ButtonPane([add_task_btn, exit_btn]))]))
 
     def on_add_task_btn_clicked(self, btn):
         dialog = NewTaskDialog(self)
 
         def callback():
-            pass
+            self.taskpile.enqueue(Task(lambda: None))
+            self.tasklist.update()
 
         urwid.connect_signal(dialog, 'ok', callback)
         dialog.show()
@@ -145,5 +182,17 @@ class MainWindow(urwid.WidgetPlaceholder):
     def on_exit_btn_clicked(self, btn):
         raise urwid.ExitMainLoop()
 
+    def update(self):
+        self.tasklist.update()
+
+
+def invoke_update(loop, (interval, act_on)):
+    act_on.update()
+    loop.set_alarm_in(interval, invoke_update, (interval, act_on))
+
+
 if __name__ == '__main__':
-    urwid.MainLoop(MainWindow()).run()
+    m = MainWindow()
+    loop = urwid.MainLoop(m)
+    invoke_update(loop, (1, m))
+    loop.run()
