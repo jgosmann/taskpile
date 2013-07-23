@@ -1,6 +1,32 @@
 import urwid
 
 
+
+def tabbed_focus(cls):
+    orig_keypress = cls.keypress
+
+    def keypress(self, size, key):
+        key = orig_keypress(self, size, key)
+        candidates = []
+        if key == 'tab':
+            candidates = range(self.focus_position + 1, len(self.contents))
+        elif key == 'shift tab' and self.focus_position > 0:
+            candidates = range(self.focus_position - 1, -1, -1)
+
+        for candidate in candidates:
+            if self.contents[candidate][0].selectable():
+                self.focus_position = candidate
+                return
+        return key
+
+    cls.keypress = keypress
+    return cls
+
+
+Pile = tabbed_focus(urwid.Pile)
+
+
+@tabbed_focus
 class ButtonPane(urwid.GridFlow):
     def __init__(self, buttons):
         cell_width = max(len(b.label) for b in buttons) + 4
@@ -36,7 +62,7 @@ class Dialog(ModalWidget):
     def __init__(self, parent, body, ok_label='OK', cancel_label='Cancel'):
         self._ok_btn = urwid.Button(ok_label)
         self._cancel_btn = urwid.Button(cancel_label)
-        w = urwid.Pile([body, ('pack', ButtonPane(
+        w = Pile([body, ('pack', ButtonPane(
             [self._ok_btn, self._cancel_btn]))])
         w = urwid.Padding(w, left=1, right=1)
         w = urwid.LineBox(w)
@@ -60,15 +86,32 @@ class Dialog(ModalWidget):
         elif key == 'esc':
             self._on_btn_click(self._cancel_btn)
         else:
-            return key
+            return super(Dialog, self).keypress(size, key)
 
 
 class NewTaskInputs(urwid.ListBox):
     def __init__(self):
         self.name = urwid.Edit("Task name: ")
         self.command = urwid.Edit("Command: ")
-        urwid.ListBox.__init__(self, urwid.SimpleFocusListWalker(
-            [self.name, self.command]))
+        self._walker = urwid.SimpleFocusListWalker([self.name, self.command])
+        urwid.ListBox.__init__(self, self._walker)
+
+    def keypress(self, size, key):
+        key = super(NewTaskInputs, self).keypress(size, key)
+        try:
+            if key == 'tab':
+                self.set_focus(
+                    self._walker.next_position(self.focus_position), 'above')
+                key = None
+                self.render(size)
+            elif key == 'shift tab':
+                self.set_focus(
+                    self._walker.prev_position(self.focus_position), 'below')
+                key = None
+                self.render(size)
+        except IndexError:
+            pass
+        return key
 
 
 class NewTaskDialog(Dialog):
