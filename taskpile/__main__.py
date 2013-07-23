@@ -1,3 +1,5 @@
+import subprocess
+
 import urwid
 
 from taskpile import State, Task, Taskpile
@@ -94,7 +96,7 @@ class NewTaskInputs(urwid.ListBox):
     def __init__(self):
         self.name = urwid.Edit("Task name: ")
         self.command = urwid.Edit("Command: ")
-        self._walker = urwid.SimpleFocusListWalker([self.name, self.command])
+        self._walker = urwid.SimpleFocusListWalker([self.command, self.name])
         urwid.ListBox.__init__(self, self._walker)
 
     def keypress(self, size, key):
@@ -117,7 +119,20 @@ class NewTaskInputs(urwid.ListBox):
 
 class NewTaskDialog(Dialog):
     def __init__(self, parent):
-        Dialog.__init__(self, parent, NewTaskInputs())
+        self._inputs = NewTaskInputs()
+        Dialog.__init__(self, parent, self._inputs)
+
+    def get_name(self):
+        if self._inputs.name.edit_text != '':
+            return self._inputs.name.edit_text
+        else:
+            return self.command
+
+    def get_command(self):
+        return self._inputs.command.edit_text
+
+    name = property(get_name)
+    command = property(get_command)
 
 
 class TaskView(urwid.Columns):
@@ -173,7 +188,9 @@ class MainWindow(urwid.WidgetPlaceholder):
         dialog = NewTaskDialog(self)
 
         def callback():
-            self.taskpile.enqueue(Task(lambda: None))
+            self.taskpile.enqueue(Task(
+                subprocess.call, (dialog.command,), {'shell': True},
+                dialog.name))
             self.tasklist.update()
 
         urwid.connect_signal(dialog, 'ok', callback)

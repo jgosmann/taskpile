@@ -18,10 +18,12 @@ class State(object):
         return 0 <= state and state < 4
 
 
+# FIXME test for kwargs
 class Task(object):
-    def __init__(self, function, args=(), name=None):
+    def __init__(self, function, args=(), kwargs={}, name=None):
         self.function = function
         self.args = args
+        self.kwargs = kwargs
         if name is None:
             self.name = function.__name__
         else:
@@ -37,15 +39,16 @@ class Task(object):
     def start(self):
         process = Process(
             target=self.__run,
-            args=(self._state, self.function) + self.args)
+            args=(self._state, self.function) + self.args,
+            kwargs=self.kwargs)
         process.start()
         self._pid = process.pid
 
     @staticmethod
-    def __run(state_var, function, *args):
+    def __run(state_var, function, *args, **kwargs):
         state_var.value = State.RUNNING
         try:
-            function(*args)
+            function(*args, **kwargs)
         finally:
             state_var.value = State.FINISHED
 
