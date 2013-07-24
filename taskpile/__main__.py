@@ -40,39 +40,39 @@ class ButtonPane(urwid.GridFlow):
 
 
 class ModalWidget(urwid.WidgetPlaceholder):
-    def __init__(self, parent, body):
-        self.parent = parent
-        self.original_widget = body
-        self.__bottom_widget = getattr(self.parent, 'original_widget')
+    mainloop = None
+
+    def __init__(self, original_widget):
+        self.original_widget = original_widget
+        self.__visible = False
 
     def show(self):
-        setattr(self.parent, 'original_widget', self)
+        if not self.__visible:
+            self.__bottom_widget = getattr(self.mainloop, 'widget')
+            self.__visible = True
+            setattr(self.mainloop, 'widget', self)
 
     def hide(self):
-        setattr(self.parent, 'original_widget', self.__bottom_widget)
+        if self.__visible:
+            setattr(self.mainloop, 'widget', self.__bottom_widget)
+            self.__visible = False
+            self.__bottom_widget = None
 
-    def set_parent(self, parent):
-        assert hasattr(parent, 'original_widget')
-        self._parent = parent
-
-    def get_parent(self):
-        return self._parent
-
-    parent = property(get_parent, set_parent)
+    visible = property(lambda self: self.__visible)
 
 
 class Dialog(ModalWidget):
     __metaclass__ = urwid.MetaSignals
     signals = ['ok', 'cancel']
 
-    def __init__(self, parent, body, ok_label='OK', cancel_label='Cancel'):
+    def __init__(self, body, ok_label='OK', cancel_label='Cancel'):
         self._ok_btn = urwid.Button(ok_label)
         self._cancel_btn = urwid.Button(cancel_label)
         w = Pile([body, ('pack', ButtonPane(
             [self._ok_btn, self._cancel_btn]))])
         w = urwid.Padding(w, left=1, right=1)
         w = urwid.LineBox(w)
-        ModalWidget.__init__(self, parent, w)
+        ModalWidget.__init__(self, w)
 
         urwid.connect_signal(self._ok_btn, 'click', self._on_btn_click)
         urwid.connect_signal(self._cancel_btn, 'click', self._on_btn_click)
@@ -123,9 +123,9 @@ class NewTaskInputs(urwid.ListBox):
 
 
 class NewTaskDialog(Dialog):
-    def __init__(self, parent):
+    def __init__(self):
         self._inputs = NewTaskInputs()
-        Dialog.__init__(self, parent, self._inputs)
+        Dialog.__init__(self, self._inputs)
 
     def get_name(self):
         if self._inputs.name.edit_text != '':
@@ -232,7 +232,7 @@ class MainWindow(urwid.WidgetPlaceholder):
             ('pack', ButtonPane([add_task_btn, exit_btn]))]))
 
     def on_add_task_btn_clicked(self, btn):
-        dialog = NewTaskDialog(self)
+        dialog = NewTaskDialog()
 
         def callback():
             self.taskpile.enqueue(Task(
@@ -262,5 +262,6 @@ if __name__ == '__main__':
     ]
     m = MainWindow()
     loop = urwid.MainLoop(m, palette)
+    ModalWidget.mainloop = loop
     invoke_update(loop, (1, m))
     loop.run()
