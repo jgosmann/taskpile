@@ -149,18 +149,23 @@ class TaskView(urwid.AttrMap):
 
     def __init__(self, task):
         self.task = task
-        self.state = urwid.Text(
-            self.state_indicators[self.task.state], wrap='clip')
-        self.pid = urwid.Text(str(self.task.pid), 'right', wrap='clip')
-        self.name = urwid.Text(self.task.name, wrap='clip')
+        self.state = urwid.Text('', wrap='clip')
+        self.pid = urwid.Text('', 'right', wrap='clip')
+        self.name = urwid.Text('', wrap='clip')
         w = urwid.Columns([(6, self.pid), (1, self.state), self.name], 1)
         super(TaskView, self).__init__(w, None, 'focus')
+        self.update()
 
     def selectable(self):
         return True
 
     def keypress(self, size, key):
         return key
+
+    def update(self):
+        self.state.set_text(self.state_indicators[self.task.state])
+        self.pid.set_text(str(self.task.pid))
+        self.name.set_text(self.task.name)
 
     @staticmethod
     def create_header():
@@ -175,13 +180,24 @@ class TaskView(urwid.AttrMap):
 class TaskList(urwid.ListBox):
     def __init__(self, taskpile):
         self.taskpile = taskpile
+        self._model_to_view = {}
         super(TaskList, self).__init__(urwid.SimpleFocusListWalker([]))
 
     def update(self):
         self.taskpile.update()
         tasks = self.taskpile.running + self.taskpile.pending + \
             self.taskpile.finished
-        self.body[:] = [TaskView(t) for t in tasks]
+        self.body[:] = [self._get_view_for_task(t) for t in tasks]
+        for view in self.body:
+            view.update()
+
+    def _get_view_for_task(self, task):
+        try:
+            return self._model_to_view[task]
+        except KeyError:
+            view = TaskView(task)
+            self._model_to_view[task] = view
+            return view
 
 
 class MainWindow(urwid.WidgetPlaceholder):
