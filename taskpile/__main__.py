@@ -1,4 +1,5 @@
 import subprocess
+from weakref import WeakKeyDictionary
 
 import urwid
 
@@ -180,7 +181,7 @@ class TaskView(urwid.AttrMap):
 class TaskList(urwid.ListBox):
     def __init__(self, taskpile):
         self.taskpile = taskpile
-        self._model_to_view = {}
+        self._model_to_view = WeakKeyDictionary()
         super(TaskList, self).__init__(urwid.SimpleFocusListWalker([]))
 
     def update(self):
