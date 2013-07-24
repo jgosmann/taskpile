@@ -1,4 +1,5 @@
 import subprocess
+from tempfile import TemporaryFile
 from weakref import WeakKeyDictionary
 
 import urwid
@@ -32,11 +33,11 @@ Pile = tabbed_focus(urwid.Pile)
 
 @tabbed_focus
 class ButtonPane(urwid.GridFlow):
-    def __init__(self, buttons):
+    def __init__(self, buttons, align='center'):
         cell_width = max(len(b.label) for b in buttons) + 4
         urwid.GridFlow.__init__(
             self, [urwid.AttrMap(b, None, 'focus') for b in buttons],
-            cell_width, 2, 0, 'center')
+            cell_width, 2, 0, align)
 
 
 class ModalWidget(urwid.WidgetPlaceholder):
@@ -175,7 +176,8 @@ class TaskView(urwid.AttrMap):
 
             confirm_diag = Dialog(urwid.Filler(urwid.Padding(urwid.Text(
                 "Are you sure, that you want to kill the task '%s'?" %
-                self.task.name))), ('relative', 75), ('relative', 25), 'Yes', 'No')
+                self.task.name))), ('relative', 75), ('relative', 25),
+                'Yes', 'No')
             urwid.connect_signal(confirm_diag, 'ok', terminate)
             confirm_diag.show()
             return None
@@ -197,9 +199,88 @@ class TaskView(urwid.AttrMap):
             'tbl_header')
 
 
+class FileWalker(urwid.ListWalker):
+    def __init__(self, file):
+        self.file = file
+        self.focus = 0
+        super(FileWalker, self).__init__()
+        self.move_to_end()
+
+    def __getitem__(self, position):
+        self.file.seek(0, 0)
+        for i in range(position + 1):
+            line = self.file.readline()
+            if line == '':
+                raise IndexError()
+        return urwid.Text(line.rstrip())
+
+    def next_position(self, position):
+        self[position + 1]  # check if position is valid
+        return position + 1
+
+    def prev_position(self, position):
+        if position < 1:
+            raise IndexError()
+        return position - 1
+
+    def set_focus(self, position):
+        self.focus = position
+        self._modified()
+
+    def move_to_end(self):
+        try:
+            while True:
+                self.set_focus(self.next_position(self.focus))
+        except IndexError:
+            pass
+
+
+class IOView(ModalWidget):
+    def __init__(self, title, stdout, stderr):
+        self.stdout = urwid.ListBox(FileWalker(stdout))
+        self.stderr = urwid.ListBox(FileWalker(stderr))
+
+        title = urwid.Text(('title', title))
+        bgroup = []
+        stdout_btn = urwid.RadioButton(
+            bgroup, 'stdout', on_state_change=self.on_stdout_btn_change)
+        stderr_btn = urwid.RadioButton(
+            bgroup, 'stderr', on_state_change=self.on_stderr_btn_change)
+        buttons = ButtonPane([stdout_btn, stderr_btn], align='left')
+        divider = urwid.Divider('-')
+        back_btn = urwid.Button('Back')
+        urwid.connect_signal(back_btn, 'click', self.on_back_btn_click)
+        footer = ButtonPane([back_btn], align='left')
+        self.textview = urwid.WidgetPlaceholder(self.stdout)
+        w = urwid.Pile([
+            ('pack', title), ('pack', buttons), ('pack', divider),
+            self.textview, ('pack', divider), ('pack', footer)])
+        w = urwid.LineBox(urwid.Padding(w, left=1, right=1))
+        super(IOView, self).__init__(w, ('relative', 100), ('relative', 100))
+
+    def keypress(self, size, key):
+        key = super(IOView, self).keypress(size, key)
+        if key == 'esc':
+            self.hide()
+            key = None
+        return key
+
+    def on_stdout_btn_change(self, btn, state):
+        if state:
+            self.textview.original_widget = self.stdout
+
+    def on_stderr_btn_change(self, btn, state):
+        if state:
+            self.textview.original_widget = self.stderr
+
+    def on_back_btn_click(self, btn):
+        self.hide()
+
+
 class TaskList(urwid.ListBox):
-    def __init__(self, taskpile):
+    def __init__(self, taskpile, io_buffers):
         self.taskpile = taskpile
+        self.io_buffers = io_buffers
         self._model_to_view = WeakKeyDictionary()
         super(TaskList, self).__init__(urwid.SimpleFocusListWalker([]))
 
@@ -225,12 +306,27 @@ class TaskList(urwid.ListBox):
             self._model_to_view[task] = view
             return view
 
+    def keypress(self, size, key):
+        key = super(TaskList, self).keypress(size, key)
+        focus_widget, focus_pos = self.body.get_focus()
+        if key is None or focus_widget is None:
+            return key
+
+        if key == 'enter':
+            IOView(
+                "Output of task '%s' (%i)" %
+                (focus_widget.task.name, focus_widget.task.pid),
+                *self.io_buffers[focus_widget.task]).show()
+            key = None
+        return key
+
 
 class MainWindow(urwid.WidgetPlaceholder):
     def __init__(self):
         self.taskpile = Taskpile()
+        self.io_buffers = WeakKeyDictionary()
 
-        self.tasklist = TaskList(self.taskpile)
+        self.tasklist = TaskList(self.taskpile, self.io_buffers)
         add_task_btn = urwid.Button("Add task ...")
         exit_btn = urwid.Button("Exit")
 
@@ -249,9 +345,13 @@ class MainWindow(urwid.WidgetPlaceholder):
         dialog = NewTaskDialog()
 
         def callback():
-            self.taskpile.enqueue(Task(
-                subprocess.call, (dialog.command,), {'shell': True},
-                dialog.name))
+            outbuf, errbuf = (TemporaryFile('w+'), TemporaryFile('w+'))
+            task = Task(
+                subprocess.call, (dialog.command,),
+                {'shell': True, 'stdout': outbuf, 'stderr': errbuf},
+                dialog.name)
+            self.io_buffers[task] = (outbuf, errbuf)
+            self.taskpile.enqueue(task)
             self.tasklist.update()
 
         urwid.connect_signal(dialog, 'ok', callback)
@@ -272,7 +372,8 @@ def invoke_update(loop, (interval, act_on)):
 if __name__ == '__main__':
     palette = [
         ('focus', 'standout', ''),
-        ('tbl_header', 'bold', '')
+        ('tbl_header', 'bold', ''),
+        ('title', 'bold', '')
     ]
     m = MainWindow()
     loop = urwid.MainLoop(m, palette)
