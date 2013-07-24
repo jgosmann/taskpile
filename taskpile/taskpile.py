@@ -103,6 +103,7 @@ class Taskpile(object):
             elif state == State.RUNNING:
                 running.append(task)
             elif state == State.FINISHED:
+                task.join()  # TODO write test for this line
                 self.finished.append(task)
             elif state == State.STOPPED:
                 stopped.append(task)

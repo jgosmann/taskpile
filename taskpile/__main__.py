@@ -187,7 +187,14 @@ class TaskView(urwid.AttrMap):
     def update(self):
         self.state.set_text(self.state_indicators[self.task.state])
         self.pid.set_text(str(self.task.pid))
-        self.name.set_text(self.task.name)
+        exitcode_str = ''
+        if self.task.exitcode is not None:
+            exitcode_str = '[%i] ' % self.task.exitcode
+            if self.task.exitcode == 0:
+                self.set_attr_map({None: 'success'})
+            else:
+                self.set_attr_map({None: 'failure'})
+        self.name.set_text(exitcode_str + self.task.name)
 
     @staticmethod
     def create_header():
@@ -373,7 +380,9 @@ if __name__ == '__main__':
     palette = [
         ('focus', 'standout', ''),
         ('tbl_header', 'bold', ''),
-        ('title', 'bold', '')
+        ('title', 'bold', ''),
+        ('success', 'dark green', ''),
+        ('failure', 'dark red', '')
     ]
     m = MainWindow()
     loop = urwid.MainLoop(m, palette)
