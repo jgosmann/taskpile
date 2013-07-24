@@ -42,15 +42,20 @@ class ButtonPane(urwid.GridFlow):
 class ModalWidget(urwid.WidgetPlaceholder):
     mainloop = None
 
-    def __init__(self, original_widget):
+    def __init__(self, original_widget, width, height):
         self.original_widget = original_widget
+        self.width = width
+        self.height = height
         self.__visible = False
 
     def show(self):
         if not self.__visible:
             self.__bottom_widget = getattr(self.mainloop, 'widget')
             self.__visible = True
-            setattr(self.mainloop, 'widget', self)
+            w = urwid.Overlay(
+                self, self.__bottom_widget, 'center', self.width,
+                'middle', self.height)
+            setattr(self.mainloop, 'widget', w)
 
     def hide(self):
         if self.__visible:
@@ -65,14 +70,15 @@ class Dialog(ModalWidget):
     __metaclass__ = urwid.MetaSignals
     signals = ['ok', 'cancel']
 
-    def __init__(self, body, ok_label='OK', cancel_label='Cancel'):
+    def __init__(
+            self, body, width, height, ok_label='OK', cancel_label='Cancel'):
         self._ok_btn = urwid.Button(ok_label)
         self._cancel_btn = urwid.Button(cancel_label)
         w = Pile([body, ('pack', ButtonPane(
             [self._ok_btn, self._cancel_btn]))])
         w = urwid.Padding(w, left=1, right=1)
         w = urwid.LineBox(w)
-        ModalWidget.__init__(self, w)
+        ModalWidget.__init__(self, w, width, height)
 
         urwid.connect_signal(self._ok_btn, 'click', self._on_btn_click)
         urwid.connect_signal(self._cancel_btn, 'click', self._on_btn_click)
@@ -125,7 +131,8 @@ class NewTaskInputs(urwid.ListBox):
 class NewTaskDialog(Dialog):
     def __init__(self):
         self._inputs = NewTaskInputs()
-        Dialog.__init__(self, self._inputs)
+        Dialog.__init__(
+            self, self._inputs, ('relative', 100), ('relative', 100))
 
     def get_name(self):
         if self._inputs.name.edit_text != '':
