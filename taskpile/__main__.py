@@ -161,7 +161,12 @@ class TaskView(urwid.AttrMap):
         return True
 
     def keypress(self, size, key):
-        return key
+        if key == 'k':
+            self.task.terminate()
+            self.update()
+            return None
+        else:
+            return key
 
     def update(self):
         self.state.set_text(self.state_indicators[self.task.state])
