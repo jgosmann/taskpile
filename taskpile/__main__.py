@@ -169,8 +169,15 @@ class TaskView(urwid.AttrMap):
 
     def keypress(self, size, key):
         if key == 'k':
-            self.task.terminate()
-            self.update()
+            def terminate():
+                self.task.terminate()
+                self.update()
+
+            confirm_diag = Dialog(urwid.Filler(urwid.Padding(urwid.Text(
+                "Are you sure, that you want to kill the task '%s'?" %
+                self.task.name))), ('relative', 75), ('relative', 25), 'Yes', 'No')
+            urwid.connect_signal(confirm_diag, 'ok', terminate)
+            confirm_diag.show()
             return None
         else:
             return key
