@@ -187,7 +187,7 @@ class TaskList(urwid.ListBox):
     def update(self):
         self.taskpile.update()
         tasks = self.taskpile.running + self.taskpile.pending + \
-            self.taskpile.finished
+            self.taskpile.finished[::-1]
         focus_widget, focus_pos = self.body.get_focus()
         self.body[:] = [self._get_view_for_task(t) for t in tasks]
         try:
