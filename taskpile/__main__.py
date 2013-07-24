@@ -33,7 +33,9 @@ Pile = tabbed_focus(urwid.Pile)
 class ButtonPane(urwid.GridFlow):
     def __init__(self, buttons):
         cell_width = max(len(b.label) for b in buttons) + 4
-        urwid.GridFlow.__init__(self, buttons, cell_width, 2, 0, 'center')
+        urwid.GridFlow.__init__(
+            self, [urwid.AttrMap(b, None, 'focus') for b in buttons],
+            cell_width, 2, 0, 'center')
 
 
 class ModalWidget(urwid.WidgetPlaceholder):
@@ -84,12 +86,14 @@ class Dialog(ModalWidget):
         self.hide()
 
     def keypress(self, size, key):
+        key = super(Dialog, self).keypress(size, key)
         if key == 'enter':
             self._on_btn_click(self._ok_btn)
+            key = None
         elif key == 'esc':
             self._on_btn_click(self._cancel_btn)
-        else:
-            return super(Dialog, self).keypress(size, key)
+            key = None
+        return key
 
 
 class NewTaskInputs(urwid.ListBox):
@@ -135,12 +139,12 @@ class NewTaskDialog(Dialog):
     command = property(get_command)
 
 
-class TaskView(urwid.Columns):
+class TaskView(urwid.AttrMap):
     state_indicators = {
         State.PENDING: ' ',
-        State.RUNNING: 'R',
-        State.FINISHED: 'F',
-        State.STOPPED: 'S'
+        State.RUNNING: 'Running',
+        State.FINISHED: 'Finished',
+        State.STOPPED: 'Stopped'
     }
 
     def __init__(self, task):
@@ -149,11 +153,23 @@ class TaskView(urwid.Columns):
             self.state_indicators[self.task.state], wrap='clip')
         self.pid = urwid.Text(str(self.task.pid), 'right', wrap='clip')
         self.name = urwid.Text(self.task.name, wrap='clip')
-        super(TaskView, self).__init__([
-            (6, self.pid), (1, self.state), self.name], 1)
+        w = urwid.Columns([(6, self.pid), (1, self.state), self.name], 1)
+        super(TaskView, self).__init__(w, None, 'focus')
 
     def selectable(self):
         return True
+
+    def keypress(self, size, key):
+        return key
+
+    @staticmethod
+    def create_header():
+        return urwid.AttrMap(
+            urwid.Columns([
+                (6, urwid.Text('PID', 'right', wrap='clip')),
+                (1, urwid.Text('Status', wrap='clip')),
+                urwid.Text('Task name', wrap='clip')], 1),
+            'tbl_header')
 
 
 class TaskList(urwid.ListBox):
@@ -181,7 +197,10 @@ class MainWindow(urwid.WidgetPlaceholder):
         urwid.connect_signal(exit_btn, 'click', self.on_exit_btn_clicked)
 
         urwid.WidgetPlaceholder.__init__(self, urwid.Pile([
-            urwid.LineBox(urwid.Padding(self.tasklist, left=1, right=1)),
+            urwid.LineBox(urwid.Padding(
+                urwid.Pile(
+                    [('pack', TaskView.create_header()), self.tasklist]),
+                left=1, right=1)),
             ('pack', ButtonPane([add_task_btn, exit_btn]))]))
 
     def on_add_task_btn_clicked(self, btn):
@@ -209,7 +228,11 @@ def invoke_update(loop, (interval, act_on)):
 
 
 if __name__ == '__main__':
+    palette = [
+        ('focus', 'standout', ''),
+        ('tbl_header', 'bold', '')
+    ]
     m = MainWindow()
-    loop = urwid.MainLoop(m)
+    loop = urwid.MainLoop(m, palette)
     invoke_update(loop, (1, m))
     loop.run()
