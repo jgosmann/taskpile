@@ -173,7 +173,7 @@ class TaskView(urwid.AttrMap):
             urwid.Columns([
                 (6, urwid.Text('PID', 'right', wrap='clip')),
                 (1, urwid.Text('Status', wrap='clip')),
-                urwid.Text('Task name', wrap='clip')], 1),
+                urwid.Text('Task', wrap='clip')], 1),
             'tbl_header')
 
 
