@@ -1,3 +1,4 @@
+import multiprocessing
 import os
 import os.path
 import shlex
@@ -452,18 +453,37 @@ class TaskList(urwid.ListBox):
         dialog.show()
 
 
-class Sidebar(urwid.ListBox):
-    def __init__(self):
-        walker = urwid.SimpleFocusListWalker([
-            urwid.Text("""
+class Sidebar(urwid.Pile):
+    def __init__(self, taskpile):
+        self.taskpile = taskpile
+        max_jobs_edit = urwid.IntEdit(
+            'Max parallel tasks: ', taskpile.max_parallel)
+        self._max_jobs_attr_map = urwid.AttrMap(max_jobs_edit, None)
+        urwid.connect_signal(
+            max_jobs_edit, 'change', self._on_max_jobs_changed)
+        controls = [
+            ('pack', urwid.Divider()),
+            urwid.ListBox(urwid.SimpleFocusListWalker([
+                self._max_jobs_attr_map
+            ])),
+            ('pack', urwid.Text("""
 Keys:
 a: Add new task
 c: Copy selected task
 k: Kill selected task
 q: Quit
-""".strip())
-        ])
-        super(Sidebar, self).__init__(walker)
+""".strip())),
+            ('pack', urwid.Divider())
+        ]
+        super(Sidebar, self).__init__(controls)
+
+    def _on_max_jobs_changed(self, w, value):
+        value = int(value) if value != '' else -1
+        if value >= 0 and value <= multiprocessing.cpu_count():
+            self.taskpile.max_parallel = value
+            self._max_jobs_attr_map.set_attr_map({'failure': None})
+        else:
+            self._max_jobs_attr_map.set_attr_map({None: 'failure'})
 
 
 class MainWindow(urwid.WidgetPlaceholder):
@@ -473,8 +493,8 @@ class MainWindow(urwid.WidgetPlaceholder):
 
         left = urwid.LineBox(urwid.Pile(
             [('pack', TaskView.create_header()), self.tasklist]))
-        right = Sidebar()
-        super(MainWindow, self).__init__(urwid.Columns([left, (21, right)], 1))
+        right = Sidebar(self.taskpile)
+        super(MainWindow, self).__init__(urwid.Columns([left, (22, right)], 1))
 
     def keypress(self, size, key):
         key = super(MainWindow, self).keypress(size, key)
