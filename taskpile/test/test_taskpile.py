@@ -351,3 +351,9 @@ class TestTaskpile(object):
             self.taskpile.pending, contains(*stopped_tasks + pending_tasks))
         assert_that(self.taskpile.running, contains(*running_tasks))
         assert_that(self.taskpile.finished, contains(*finished_tasks))
+
+    def test_joins_finished_tasks(self):
+        task = self._create_mocktask_in_state(State.FINISHED)
+        self.taskpile.running = [task]
+        self.taskpile.update()
+        task.join.assert_called_once_with()
