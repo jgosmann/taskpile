@@ -1,9 +1,14 @@
+import os
+import os.path
+import shlex
+import shutil
 import subprocess
-from tempfile import TemporaryFile
+from tempfile import mkstemp, TemporaryFile
 from weakref import WeakKeyDictionary
 
 import urwid
 
+from sanitize import quote_for_shell
 from taskpile import State, Task, Taskpile
 
 
@@ -106,27 +111,90 @@ class Dialog(ModalWidget):
 
 class NewTaskInputs(urwid.ListBox):
     def __init__(self):
+        self.__split_command = []
+        self.original_files = {}
         self.name = urwid.Edit("Task name: ")
         self.command = urwid.Edit("Command: ")
-        self._walker = urwid.SimpleFocusListWalker([self.command, self.name])
-        urwid.ListBox.__init__(self, self._walker)
+        walker = urwid.SimpleFocusListWalker([self.command, self.name])
+        urwid.connect_signal(self.command, 'change', self._on_command_change)
+        urwid.ListBox.__init__(self, walker)
 
     def keypress(self, size, key):
         key = super(NewTaskInputs, self).keypress(size, key)
         try:
             if key == 'tab':
                 self.set_focus(
-                    self._walker.next_position(self.focus_position), 'above')
+                    self.body.next_position(self.focus_position), 'above')
                 key = None
                 self.render(size)
             elif key == 'shift tab':
                 self.set_focus(
-                    self._walker.prev_position(self.focus_position), 'below')
+                    self.body.prev_position(self.focus_position), 'below')
                 key = None
                 self.render(size)
         except IndexError:
             pass
         return key
+
+    def _on_command_change(self, edit, text):
+        self.__split_command = shlex.split(text)
+        files = filter(os.path.isfile, self.split_command)
+        self.body[2:] = [self._create_edit_controls_for_file(i, f)
+                         for i, f in enumerate(files)]
+
+    def _create_edit_controls_for_file(self, idx, file):
+        if file in self.original_files:
+            edit = urwid.Button("Edit '%s' ..." % file)
+            urwid.connect_signal(
+                edit, 'click', self._make_edited_copy, (idx + 1, file))
+            reset = urwid.Button("Reset")
+            urwid.connect_signal(
+                reset, 'click', self._reset_copied_file, (idx + 1, file))
+            return ButtonPane([edit, reset], 'left')
+        else:
+            btn = urwid.Button("Replace '%s' by edited copy ..." % file)
+            urwid.connect_signal(
+                btn, 'click', self._make_edited_copy, (idx + 1, file))
+            return urwid.AttrMap(btn, None, 'focus')
+
+    def _make_edited_copy(self, btn, (idx, filename)):
+        if filename not in self.original_files:
+            filename = self._make_copy(idx, filename)
+        self._edit(filename)
+
+    def _edit(self, filename):
+        if subprocess.call([os.environ['EDITOR'], filename]) != 0:
+            pass  # FIXME show STDERR
+
+    def _make_copy(self, idx, filename):
+        prefix, suffix = os.path.splitext(os.path.basename(filename))
+        fd, path = mkstemp(
+            prefix=prefix + '.', suffix=suffix, dir=os.getcwd())
+        os.close(fd)
+        shutil.copyfile(filename, path)
+        copy_filename = os.path.relpath(path)
+        self.original_files[copy_filename] = filename
+        self.set_arg(idx, copy_filename)
+        return copy_filename
+
+    def _reset_copied_file(self, btn, (idx, filename)):
+        if filename in self.original_files:
+            os.unlink(filename)
+            self.set_arg(idx, self.original_files[filename])
+
+    def get_split_command(self):
+        return tuple(self.__split_command)
+
+    def set_split_command(self, value):
+        self.command.set_edit_text(' '.join(
+            quote_for_shell(arg) for arg in value))
+
+    def set_arg(self, idx, value):
+        self.__split_command[idx] = value
+        self.command.set_edit_text(' '.join(
+            quote_for_shell(arg) for arg in self.__split_command))
+
+    split_command = property(get_split_command, set_split_command)
 
 
 class NewTaskDialog(Dialog):

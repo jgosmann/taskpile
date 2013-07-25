@@ -1,3 +1,9 @@
+The overall program is licensed under the GNU General Public Licence Version 2
+(see below). Parts of sanitize.py are licensed under the
+PSF License Agreement for Python 3.3.2 to be found at
+<http://docs.python.org/3.3/license.html#terms-and-conditions-for-accessing-or-otherwise-using-python>.
+
+
 GNU GENERAL PUBLIC LICENSE
                        Version 2, June 1991
 
