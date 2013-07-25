@@ -1,6 +1,7 @@
 from functools import wraps
 from multiprocessing import Pipe, Process
 from multiprocessing.reduction import reduce_connection
+import os
 import pickle
 import time
 
@@ -10,6 +11,7 @@ try:
     from unittest.mock import patch, MagicMock
 except:
     from mock import patch, MagicMock
+from nose import SkipTest
 
 from taskpile import State, Task, Taskpile
 
@@ -228,6 +230,20 @@ class TestTask(object):
         the_name = 'taskname'
         task = Task(noop, name=the_name)
         assert_that(task.name, is_(the_name))
+
+    @timelimit(1)
+    def test_sets_niceness(self):
+        if os.nice(0) > 14:
+            raise SkipTest(
+                'This test can only be run with a niceness of 14 or lower.')
+
+        def return_niceness():
+            return os.nice(0)
+
+        task = Task(return_niceness, niceness=5)
+        task.start()
+        task.join()
+        assert_that(task.exitcode, is_(os.nice(0) + 5))
 
 
 class TestTaskpile(object):

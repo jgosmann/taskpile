@@ -20,7 +20,7 @@ class State(object):
 
 
 class Task(object):
-    def __init__(self, function, args=(), kwargs={}, name=None):
+    def __init__(self, function, args=(), kwargs={}, name=None, niceness=0):
         self.function = function
         self.args = args
         self.kwargs = kwargs
@@ -28,6 +28,7 @@ class Task(object):
             self.name = function.__name__
         else:
             self.name = name
+        self.niceness = niceness
         self._exitcode = None
         self._exitsignal = None
         self._pid = None
@@ -41,14 +42,15 @@ class Task(object):
     def start(self):
         process = Process(
             target=self.__run,
-            args=(self._state, self.function) + self.args,
+            args=(self._state, self.niceness, self.function) + self.args,
             kwargs=self.kwargs)
         process.start()
         self._pid = process.pid
 
     @staticmethod
-    def __run(state_var, function, *args, **kwargs):
+    def __run(state_var, niceness, function, *args, **kwargs):
         state_var.value = State.RUNNING
+        os.nice(niceness)
         try:
             retval = function(*args, **kwargs)
             try:
