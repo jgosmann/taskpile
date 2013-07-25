@@ -12,6 +12,19 @@ from sanitize import quote_for_shell
 from taskpile import State, Task, Taskpile
 
 
+class ExternalTask(Task):
+    def __init__(self, command, name=None, original_files={}):
+        if name is None:
+            name = command
+        self.command = command
+        self.original_files = original_files
+        self.outbuf, self.errbuf = (TemporaryFile('w+'), TemporaryFile('w+'))
+        super(ExternalTask, self).__init__(
+            subprocess.call, (command,), {
+                'shell': True, 'stdout': self.outbuf, 'stderr': self.errbuf},
+            name)
+
+
 def tabbed_focus(cls):
     orig_keypress = cls.keypress
 
@@ -110,7 +123,7 @@ class Dialog(ModalWidget):
 
 
 class NewTaskInputs(urwid.ListBox):
-    def __init__(self):
+    def __init__(self, template=None):
         self.__split_command = []
         self.original_files = {}
         self.name = urwid.Edit("Task name: ")
@@ -118,6 +131,22 @@ class NewTaskInputs(urwid.ListBox):
         walker = urwid.SimpleFocusListWalker([self.command, self.name])
         urwid.connect_signal(self.command, 'change', self._on_command_change)
         urwid.ListBox.__init__(self, walker)
+
+        if template is not None:
+            self.init_from_template(template)
+
+    def init_from_template(self, template):
+        self.original_files = template.original_files
+        self.command.set_edit_text(template.command)
+        if template.command != template.name:
+            self.name.set_edit_text(template.name)
+        for i, f in enumerate(self._get_files(), 1):
+            if f in self.original_files:
+                copy = self._create_tmp_file_for(self.original_files[f])
+                shutil.copyfile(f, copy)
+                self.original_files[copy] = self.original_files[f]
+                del self.original_files[f]
+                self.set_arg(i, copy)
 
     def keypress(self, size, key):
         key = super(NewTaskInputs, self).keypress(size, key)
@@ -136,9 +165,12 @@ class NewTaskInputs(urwid.ListBox):
             pass
         return key
 
+    def _get_files(self):
+        return filter(os.path.isfile, self.split_command)
+
     def _on_command_change(self, edit, text):
         self.__split_command = shlex.split(text)
-        files = filter(os.path.isfile, self.split_command)
+        files = self._get_files()
         self.body[2:] = [self._create_edit_controls_for_file(i, f)
                          for i, f in enumerate(files)]
 
@@ -166,16 +198,20 @@ class NewTaskInputs(urwid.ListBox):
         if subprocess.call([os.environ['EDITOR'], filename]) != 0:
             pass  # FIXME show STDERR
 
-    def _make_copy(self, idx, filename):
+    @staticmethod
+    def _create_tmp_file_for(filename):
         prefix, suffix = os.path.splitext(os.path.basename(filename))
         fd, path = mkstemp(
             prefix=prefix + '.', suffix=suffix, dir=os.getcwd())
         os.close(fd)
+        return os.path.relpath(path)
+
+    def _make_copy(self, idx, filename):
+        path = self._create_tmp_file_for(filename)
         shutil.copyfile(filename, path)
-        copy_filename = os.path.relpath(path)
-        self.original_files[copy_filename] = filename
-        self.set_arg(idx, copy_filename)
-        return copy_filename
+        self.original_files[path] = filename
+        self.set_arg(idx, path)
+        return path
 
     def _reset_copied_file(self, btn, (idx, filename)):
         if filename in self.original_files:
@@ -198,8 +234,8 @@ class NewTaskInputs(urwid.ListBox):
 
 
 class NewTaskDialog(Dialog):
-    def __init__(self):
-        self._inputs = NewTaskInputs()
+    def __init__(self, template=None):
+        self._inputs = NewTaskInputs(template)
         Dialog.__init__(
             self, self._inputs, ('relative', 100), ('relative', 100))
 
@@ -212,8 +248,12 @@ class NewTaskDialog(Dialog):
     def get_command(self):
         return self._inputs.command.edit_text
 
+    def get_original_files(self):
+        return self._inputs.original_files
+
     name = property(get_name)
     command = property(get_command)
+    original_files = property(get_original_files)
 
 
 class TaskView(urwid.AttrMap):
@@ -353,9 +393,8 @@ class IOView(ModalWidget):
 
 
 class TaskList(urwid.ListBox):
-    def __init__(self, taskpile, io_buffers):
+    def __init__(self, taskpile):
         self.taskpile = taskpile
-        self.io_buffers = io_buffers
         self._model_to_view = WeakKeyDictionary()
         super(TaskList, self).__init__(urwid.SimpleFocusListWalker([]))
 
@@ -391,17 +430,28 @@ class TaskList(urwid.ListBox):
             IOView(
                 "Output of task '%s' (%i)" %
                 (focus_widget.task.name, focus_widget.task.pid),
-                *self.io_buffers[focus_widget.task]).show()
+                focus_widget.task.outbuf, focus_widget.task.errbuf).show()
             key = None
+        elif key == 'c':
+            dialog = NewTaskDialog(focus_widget.task)
+
+            def callback():
+                task = ExternalTask(
+                    dialog.command, dialog.name, dialog.original_files)
+                self.taskpile.enqueue(task)
+                self.update()
+
+            urwid.connect_signal(dialog, 'ok', callback)
+            dialog.show()
+            key = None
+
         return key
 
 
 class MainWindow(urwid.WidgetPlaceholder):
     def __init__(self):
         self.taskpile = Taskpile()
-        self.io_buffers = WeakKeyDictionary()
-
-        self.tasklist = TaskList(self.taskpile, self.io_buffers)
+        self.tasklist = TaskList(self.taskpile)
         add_task_btn = urwid.Button("Add task ...")
         exit_btn = urwid.Button("Exit")
 
@@ -420,12 +470,8 @@ class MainWindow(urwid.WidgetPlaceholder):
         dialog = NewTaskDialog()
 
         def callback():
-            outbuf, errbuf = (TemporaryFile('w+'), TemporaryFile('w+'))
-            task = Task(
-                subprocess.call, (dialog.command,),
-                {'shell': True, 'stdout': outbuf, 'stderr': errbuf},
-                dialog.name)
-            self.io_buffers[task] = (outbuf, errbuf)
+            task = ExternalTask(
+                dialog.command, dialog.name, dialog.original_files)
             self.taskpile.enqueue(task)
             self.tasklist.update()
 
