@@ -191,7 +191,8 @@ class NewTaskInputs(urwid.ListBox):
                 btn, 'click', self._make_edited_copy, (idx + 1, file))
             return urwid.AttrMap(btn, None, 'focus')
 
-    def _make_edited_copy(self, btn, (idx, filename)):
+    def _make_edited_copy(self, btn, arg_data):
+        idx, filename = arg_data
         if filename not in self.original_files:
             filename = self._make_copy(idx, filename)
         self._edit(filename)
@@ -215,7 +216,8 @@ class NewTaskInputs(urwid.ListBox):
         self.set_arg(idx, path)
         return path
 
-    def _reset_copied_file(self, btn, (idx, filename)):
+    def _reset_copied_file(self, btn, arg_data):
+        idx, filename = arg_data
         if filename in self.original_files:
             os.unlink(filename)
             self.set_arg(idx, self.original_files[filename])
@@ -413,11 +415,12 @@ class TaskList(urwid.ListBox):
             self.taskpile.finished[::-1]
         focus_widget, focus_pos = self.body.get_focus()
         self.body[:] = [self._get_view_for_task(t) for t in tasks]
-        try:
-            new_focus = self.body.index(focus_widget)
-        except:
-            new_focus = max(len(self.body) - 1, focus_pos)
-        self.body.set_focus(new_focus)
+        if focus_pos is not None:
+            try:
+                new_focus = self.body.index(focus_widget)
+            except:
+                new_focus = max(len(self.body) - 1, focus_pos)
+            self.body.set_focus(new_focus)
         for view in self.body:
             view.update()
 
@@ -517,7 +520,8 @@ class MainWindow(urwid.WidgetPlaceholder):
         self.tasklist.update()
 
 
-def invoke_update(loop, (interval, act_on)):
+def invoke_update(loop, args):
+    interval, act_on = args
     act_on.update()
     loop.set_alarm_in(interval, invoke_update, (interval, act_on))
 
