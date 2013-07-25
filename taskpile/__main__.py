@@ -10,6 +10,7 @@ from weakref import WeakKeyDictionary
 import urwid
 
 from sanitize import quote_for_shell
+from signalnames import signalnames
 from taskpile import State, Task, Taskpile
 
 
@@ -298,9 +299,16 @@ class TaskView(urwid.AttrMap):
         self.pid.set_text(str(self.task.pid))
         exitcode_str = ''
         if self.task.exitcode is not None:
-            exitcode_str = '[%i] ' % self.task.exitcode
+            if self.task.exitsignal is not None and self.task.exitsignal != 0:
+                exitcode_str = '[%i, %s] ' % (
+                    self.task.exitcode, signalnames[self.task.exitsignal])
+            else:
+                exitcode_str = '[%i] ' % self.task.exitcode
             if self.task.exitcode == 0:
-                self.set_attr_map({None: 'success'})
+                if self.task.exitsignal == 0:
+                    self.set_attr_map({None: 'success'})
+                else:
+                    self.set_attr_map({None: 'warning'})
             else:
                 self.set_attr_map({None: 'failure'})
         self.name.set_text(exitcode_str + self.task.name)
@@ -520,6 +528,7 @@ if __name__ == '__main__':
         ('tbl_header', 'bold', ''),
         ('title', 'bold', ''),
         ('success', 'dark green', ''),
+        ('warning', 'brown', ''),
         ('failure', 'dark red', '')
     ]
     m = MainWindow()
