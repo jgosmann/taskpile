@@ -142,9 +142,10 @@ class NewTaskInputs(urwid.ListBox):
         self.original_files = {}
         self.name = urwid.Edit("Task name: ")
         self.command = urwid.Edit("Command: ")
+        self._command_attr_map = urwid.AttrMap(self.command, 'failure')
         self.niceness = IntEditWithNegNumbers("Niceness: ", '20')
         self._niceness_attr_map = urwid.AttrMap(self.niceness, None)
-        controls = [self.command, self.name, self._niceness_attr_map]
+        controls = [self._command_attr_map, self.name, self._niceness_attr_map]
         self._num_fixed_elements = len(controls)
         walker = urwid.SimpleFocusListWalker(controls)
         urwid.connect_signal(self.command, 'change', self._on_command_change)
@@ -188,6 +189,11 @@ class NewTaskInputs(urwid.ListBox):
         return filter(os.path.isfile, self.split_command)
 
     def _on_command_change(self, edit, text):
+        if text == '':
+            self._command_attr_map.set_attr_map({None: 'failure'})
+        else:
+            self._command_attr_map.set_attr_map({'failure': None})
+
         self.__split_command = shlex.split(text)
         files = self._get_files()
         self.body[self._num_fixed_elements:] = [
