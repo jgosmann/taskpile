@@ -233,17 +233,17 @@ class TestTask(object):
 
     @timelimit(1)
     def test_sets_niceness(self):
-        if os.nice(0) > 14:
+        if os.nice(0) > 18:
             raise SkipTest(
-                'This test can only be run with a niceness of 14 or lower.')
+                'This test can only be run with a niceness of 18 or lower.')
 
         def return_niceness():
             return os.nice(0)
 
-        task = Task(return_niceness, niceness=5)
+        task = Task(return_niceness, niceness=1)
         task.start()
         task.join()
-        assert_that(task.exitcode, is_(os.nice(0) + 5))
+        assert_that(task.exitcode, is_(os.nice(0) + 1))
 
 
 class TestTaskpile(object):
