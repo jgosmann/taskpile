@@ -15,7 +15,7 @@ from taskpile import State, Task, Taskpile
 
 
 class ExternalTask(Task):
-    def __init__(self, command, name=None, original_files={}):
+    def __init__(self, command, name=None, original_files={}, niceness=0):
         if name is None:
             name = command
         self.command = command
@@ -24,7 +24,7 @@ class ExternalTask(Task):
         super(ExternalTask, self).__init__(
             subprocess.call, (command,), {
                 'shell': True, 'stdout': self.outbuf, 'stderr': self.errbuf},
-            name)
+            name, niceness=niceness)
 
 
 def tabbed_focus(cls):
@@ -108,7 +108,8 @@ class Dialog(ModalWidget):
 
     def _on_btn_click(self, btn):
         try:
-            urwid.emit_signal(self, self._signal_map[btn])
+            if urwid.emit_signal(self, self._signal_map[btn]):
+                return
         except KeyError:
             pass
         self.hide()
@@ -124,14 +125,30 @@ class Dialog(ModalWidget):
         return key
 
 
+class IntEditWithNegNumbers(urwid.Edit):
+    def keypress(self, size, key):
+        if key == '-' and self.edit_pos != 0:
+            return None
+
+        if len(key) == 1 and key not in '-0123456789':
+            return key
+
+        return super(IntEditWithNegNumbers, self).keypress(size, key)
+
+
 class NewTaskInputs(urwid.ListBox):
     def __init__(self, template=None):
         self.__split_command = []
         self.original_files = {}
         self.name = urwid.Edit("Task name: ")
         self.command = urwid.Edit("Command: ")
-        walker = urwid.SimpleFocusListWalker([self.command, self.name])
+        self.niceness = IntEditWithNegNumbers("Niceness: ", '20')
+        self._niceness_attr_map = urwid.AttrMap(self.niceness, None)
+        controls = [self.command, self.name, self._niceness_attr_map]
+        self._num_fixed_elements = len(controls)
+        walker = urwid.SimpleFocusListWalker(controls)
         urwid.connect_signal(self.command, 'change', self._on_command_change)
+        urwid.connect_signal(self.niceness, 'change', self._on_niceness_change)
         urwid.ListBox.__init__(self, walker)
 
         if template is not None:
@@ -173,8 +190,9 @@ class NewTaskInputs(urwid.ListBox):
     def _on_command_change(self, edit, text):
         self.__split_command = shlex.split(text)
         files = self._get_files()
-        self.body[2:] = [self._create_edit_controls_for_file(i, f)
-                         for i, f in enumerate(files)]
+        self.body[self._num_fixed_elements:] = [
+            self._create_edit_controls_for_file(i, f)
+            for i, f in enumerate(files)]
 
     def _create_edit_controls_for_file(self, idx, file):
         if file in self.original_files:
@@ -229,12 +247,32 @@ class NewTaskInputs(urwid.ListBox):
         self.command.set_edit_text(' '.join(
             quote_for_shell(arg) for arg in value))
 
+    split_command = property(get_split_command, set_split_command)
+
     def set_arg(self, idx, value):
         self.__split_command[idx] = value
         self.command.set_edit_text(' '.join(
             quote_for_shell(arg) for arg in self.__split_command))
 
-    split_command = property(get_split_command, set_split_command)
+    def _on_niceness_change(self, w, value):
+        try:
+            value = int(value)
+        except ValueError:
+            self._niceness_attr_map.set_attr_map({None: 'failure'})
+            return
+        self._niceness_attr_map.set_attr_map({'failure': None})
+
+    def validate(self):
+        if self.command.edit_text == '':
+            raise InputValidationError('Empty command string.')
+        try:
+            int(self.niceness.edit_text)
+        except ValueError:
+            raise InputValidationError('Invalid niceness.')
+
+
+class InputValidationError(Exception):
+    pass
 
 
 class NewTaskDialog(Dialog):
@@ -242,6 +280,9 @@ class NewTaskDialog(Dialog):
         self._inputs = NewTaskInputs(template)
         Dialog.__init__(
             self, self._inputs, ('relative', 100), ('relative', 100))
+
+    def validate(self):
+        self._inputs.validate()
 
     def get_name(self):
         if self._inputs.name.edit_text != '':
@@ -255,9 +296,13 @@ class NewTaskDialog(Dialog):
     def get_original_files(self):
         return self._inputs.original_files
 
+    def get_niceness(self):
+        return int(self._inputs.niceness.edit_text)
+
     name = property(get_name)
     command = property(get_command)
     original_files = property(get_original_files)
+    niceness = property(get_niceness)
 
 
 class TaskView(urwid.AttrMap):
@@ -455,10 +500,16 @@ class TaskList(urwid.ListBox):
 
     def add_task_with_dialog(self, dialog):
         def callback():
-            task = ExternalTask(
-                dialog.command, dialog.name, dialog.original_files)
-            self.taskpile.enqueue(task)
-            self.update()
+            try:
+                dialog.validate()
+                task = ExternalTask(
+                    dialog.command, dialog.name, dialog.original_files,
+                    niceness=dialog.niceness)
+                self.taskpile.enqueue(task)
+                self.update()
+            except InputValidationError:
+                # FIXME show some error message
+                return True
 
         urwid.connect_signal(dialog, 'ok', callback)
         dialog.show()
