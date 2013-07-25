@@ -423,63 +423,65 @@ class TaskList(urwid.ListBox):
     def keypress(self, size, key):
         key = super(TaskList, self).keypress(size, key)
         focus_widget, focus_pos = self.body.get_focus()
-        if key is None or focus_widget is None:
+        if key is None:
             return key
 
-        if key == 'enter':
+        if key == 'enter' and focus_widget is not None:
             IOView(
                 "Output of task '%s' (%i)" %
                 (focus_widget.task.name, focus_widget.task.pid),
                 focus_widget.task.outbuf, focus_widget.task.errbuf).show()
             key = None
-        elif key == 'c':
-            dialog = NewTaskDialog(focus_widget.task)
-
-            def callback():
-                task = ExternalTask(
-                    dialog.command, dialog.name, dialog.original_files)
-                self.taskpile.enqueue(task)
-                self.update()
-
-            urwid.connect_signal(dialog, 'ok', callback)
-            dialog.show()
+        elif key == 'a':
+            self._add_task_with_dialog(NewTaskDialog())
+            key = None
+        elif key == 'c' and focus_widget is not None:
+            self._add_task_with_dialog(NewTaskDialog(focus_widget.task))
             key = None
 
         return key
+
+    def _add_task_with_dialog(self, dialog):
+        def callback():
+            task = ExternalTask(
+                dialog.command, dialog.name, dialog.original_files)
+            self.taskpile.enqueue(task)
+            self.update()
+
+        urwid.connect_signal(dialog, 'ok', callback)
+        dialog.show()
+
+
+class Sidebar(urwid.ListBox):
+    def __init__(self):
+        walker = urwid.SimpleFocusListWalker([
+            urwid.Text("""
+Keys:
+a: Add new task
+c: Copy selected task
+k: Kill selected task
+q: Quit
+""".strip())
+        ])
+        super(Sidebar, self).__init__(walker)
 
 
 class MainWindow(urwid.WidgetPlaceholder):
     def __init__(self):
         self.taskpile = Taskpile()
         self.tasklist = TaskList(self.taskpile)
-        add_task_btn = urwid.Button("Add task ...")
-        exit_btn = urwid.Button("Exit")
 
-        urwid.connect_signal(
-            add_task_btn, 'click', self.on_add_task_btn_clicked)
-        urwid.connect_signal(exit_btn, 'click', self.on_exit_btn_clicked)
+        left = urwid.LineBox(urwid.Pile(
+            [('pack', TaskView.create_header()), self.tasklist]))
+        right = Sidebar()
+        super(MainWindow, self).__init__(urwid.Columns([left, (21, right)], 1))
 
-        urwid.WidgetPlaceholder.__init__(self, urwid.Pile([
-            urwid.LineBox(urwid.Padding(
-                urwid.Pile(
-                    [('pack', TaskView.create_header()), self.tasklist]),
-                left=1, right=1)),
-            ('pack', ButtonPane([add_task_btn, exit_btn]))]))
-
-    def on_add_task_btn_clicked(self, btn):
-        dialog = NewTaskDialog()
-
-        def callback():
-            task = ExternalTask(
-                dialog.command, dialog.name, dialog.original_files)
-            self.taskpile.enqueue(task)
-            self.tasklist.update()
-
-        urwid.connect_signal(dialog, 'ok', callback)
-        dialog.show()
-
-    def on_exit_btn_clicked(self, btn):
-        raise urwid.ExitMainLoop()
+    def keypress(self, size, key):
+        key = super(MainWindow, self).keypress(size, key)
+        if key == 'q':
+            # FIXME do not exit if processes still running
+            raise urwid.ExitMainLoop()
+        return key
 
     def update(self):
         self.tasklist.update()
