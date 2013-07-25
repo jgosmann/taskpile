@@ -1,5 +1,5 @@
 import patch_multiprocessing
-from multiprocessing import Process, Value
+from multiprocessing import cpu_count, Process, Value
 import os
 import signal
 import sys
@@ -82,7 +82,7 @@ class Task(object):
 
 
 class Taskpile(object):
-    def __init__(self, max_parallel=1):
+    def __init__(self, max_parallel=max(1, cpu_count() - 1)):
         self.pending = []
         self.running = []
         self.finished = []
