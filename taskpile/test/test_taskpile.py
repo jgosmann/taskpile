@@ -245,6 +245,16 @@ class TestTask(object):
         task.join()
         assert_that(task.exitcode, is_(os.nice(0) + 1))
 
+    def test_handles_terminate_on_unstarted_task(self):
+        task = Task(noop)
+        task.terminate()
+        assert_that(task.state, is_(State.FINISHED))
+
+    def test_handles_join_on_unstarted_and_terminated_task(self):
+        task = Task(noop)
+        task.terminate()
+        task.join()
+
 
 class TestTaskpile(object):
     def setUp(self):

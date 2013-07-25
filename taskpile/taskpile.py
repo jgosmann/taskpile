@@ -70,12 +70,14 @@ class Task(object):
         self._state.value = State.RUNNING
 
     def join(self):
-        opid, exit_status_indication = os.waitpid(self.pid, 0)
-        self._exitsignal = exit_status_indication & 0xff
-        self._exitcode = exit_status_indication >> 8
+        if self.pid is not None:
+            opid, exit_status_indication = os.waitpid(self.pid, 0)
+            self._exitsignal = exit_status_indication & 0xff
+            self._exitcode = exit_status_indication >> 8
 
     def terminate(self):
-        os.kill(self.pid, signal.SIGTERM)
+        if self.pid is not None:
+            os.kill(self.pid, signal.SIGTERM)
         self._state.value = State.FINISHED
 
 
