@@ -260,7 +260,7 @@ class TaskView(urwid.AttrMap):
     state_indicators = {
         State.PENDING: ' ',
         State.RUNNING: 'Running',
-        State.FINISHED: 'Finished',
+        State.FINISHED: 'Done',
         State.STOPPED: 'Stopped'
     }
 
