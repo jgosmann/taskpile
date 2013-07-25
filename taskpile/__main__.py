@@ -434,15 +434,15 @@ class TaskList(urwid.ListBox):
                 focus_widget.task.outbuf, focus_widget.task.errbuf).show()
             key = None
         elif key == 'a':
-            self._add_task_with_dialog(NewTaskDialog())
+            self.add_task_with_dialog(NewTaskDialog())
             key = None
         elif key == 'c' and focus_widget is not None:
-            self._add_task_with_dialog(NewTaskDialog(focus_widget.task))
+            self.add_task_with_dialog(NewTaskDialog(focus_widget.task))
             key = None
 
         return key
 
-    def _add_task_with_dialog(self, dialog):
+    def add_task_with_dialog(self, dialog):
         def callback():
             task = ExternalTask(
                 dialog.command, dialog.name, dialog.original_files)
@@ -501,6 +501,8 @@ class MainWindow(urwid.WidgetPlaceholder):
         if key == 'q':
             # FIXME do not exit if processes still running
             raise urwid.ExitMainLoop()
+        elif key == 'a':
+            key = self.tasklist.add_task_with_dialog(NewTaskDialog())
         return key
 
     def update(self):
