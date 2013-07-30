@@ -1,11 +1,14 @@
-import patch_multiprocessing
+try:
+    from taskpile import _patch_multiprocessing
+except:
+    import _patch_multiprocessing
 from multiprocessing import cpu_count, Process, Value
 import os
 import signal
 import sys
 
 
-assert patch_multiprocessing  # suppress unused warning
+assert _patch_multiprocessing  # suppress unused warning
 
 
 class State(object):

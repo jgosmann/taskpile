@@ -13,7 +13,7 @@ except:
     from mock import patch, MagicMock
 from nose import SkipTest
 
-from taskpile import State, Task, Taskpile
+from taskpile.core import State, Task, Taskpile
 
 
 def run_in_process(connection, function, *args, **kwargs):

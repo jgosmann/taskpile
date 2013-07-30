@@ -11,5 +11,5 @@ setup(
     author='Jan Gosmann',
     author_email='jan@hyper-world.de',
     # url= ... TODO
-    packages=find_packages())
-    #scripts=['bin/fridge'])  <- later ...
+    packages=find_packages(),
+    scripts=['bin/taskpile'])
