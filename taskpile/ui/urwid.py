@@ -188,7 +188,8 @@ class NewTaskInputs(urwid.ListBox):
         return key
 
     def _get_files(self):
-        return filter(os.path.isfile, self.split_command)
+        return [(i, f) for i, f in enumerate(self.split_command)
+                if os.path.isfile(f)]
 
     def _on_command_change(self, edit, text):
         if text == '':
@@ -204,21 +205,21 @@ class NewTaskInputs(urwid.ListBox):
         files = self._get_files()
         self.body[self._num_fixed_elements:] = [
             self._create_edit_controls_for_file(i, f)
-            for i, f in enumerate(files)]
+            for i, f in files]
 
     def _create_edit_controls_for_file(self, idx, file):
         if file in self.original_files:
             edit = urwid.Button("Edit '%s' ..." % file)
             urwid.connect_signal(
-                edit, 'click', self._make_edited_copy, (idx + 1, file))
+                edit, 'click', self._make_edited_copy, (idx, file))
             reset = urwid.Button("Reset")
             urwid.connect_signal(
-                reset, 'click', self._reset_copied_file, (idx + 1, file))
+                reset, 'click', self._reset_copied_file, (idx, file))
             return ButtonPane([edit, reset], 'left')
         else:
             btn = urwid.Button("Replace '%s' by edited copy ..." % file)
             urwid.connect_signal(
-                btn, 'click', self._make_edited_copy, (idx + 1, file))
+                btn, 'click', self._make_edited_copy, (idx, file))
             return urwid.AttrMap(btn, None, 'focus')
 
     def _make_edited_copy(self, btn, arg_data):
