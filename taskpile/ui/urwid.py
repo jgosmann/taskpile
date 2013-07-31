@@ -196,7 +196,11 @@ class NewTaskInputs(urwid.ListBox):
         else:
             self._command_attr_map.set_attr_map({'failure': None})
 
-        self.__split_command = shlex.split(text)
+        try:
+            self.__split_command = shlex.split(text)
+        except ValueError:
+            return  # Ignore string which cannot be parsed
+
         files = self._get_files()
         self.body[self._num_fixed_elements:] = [
             self._create_edit_controls_for_file(i, f)
