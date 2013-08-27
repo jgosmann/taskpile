@@ -1,3 +1,4 @@
+import itertools
 from StringIO import StringIO
 
 from configobj import ConfigObj
@@ -19,18 +20,27 @@ class TaskGroupSpec(object):
             yield spec
 
     def _iter_subspecs(self, spec):
-        base_spec = {}
+        value_lists = {}
         spec_gens = []
         for k, v in spec.items():
             if hasattr(v, 'items'):
                 spec_gens.append(v)
+            elif len(k) > 1 and k[0] == '_' and k[1] != '_':
+                value_lists[k[1:]] = v
             else:
-                base_spec[k] = v
+                value_lists[k] = [v]
         if len(spec_gens) <= 0:
-            yield base_spec
+            for value_set in itertools.product(*value_lists.values()):
+                merged = {}
+                for key, value in zip(value_lists.keys(), value_set):
+                    merged[key] = value
+                yield merged
         else:
             for gen in spec_gens:
                 for spec in self._iter_subspecs(gen):
-                    merged = base_spec.copy()
-                    merged.update(spec)
-                    yield merged
+                    for value_set in itertools.product(*value_lists.values()):
+                        merged = {}
+                        for key, value in zip(value_lists.keys(), value_set):
+                            merged[key] = value
+                        merged.update(spec)
+                        yield merged

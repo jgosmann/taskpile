@@ -38,3 +38,20 @@ class TestTaskGroupSpec(object):
             {'same4all': 'same', 'task_id': '1', 'sub': 'X', '__cmd__': '1 X'}
         ]
         assert_that(group.iter_specs(), contains_inanyorder(*expected))
+
+    def test_can_use_parameter_lists_to_instatiate_task_specs(self):
+        spec_str = '''
+            __cmd__ = %(value0)s %(value1)s
+            _value0 = 1, 2, '1, 2'
+            _value1 = 1, 2
+            '''
+        group = TaskGroupSpec.from_spec_str(spec_str)
+        expected = [
+            {'value0': '1', 'value1': '1', '__cmd__': '1 1'},
+            {'value0': '2', 'value1': '1', '__cmd__': '2 1'},
+            {'value0': '1, 2', 'value1': '1', '__cmd__': '1, 2 1'},
+            {'value0': '1', 'value1': '2', '__cmd__': '1 2'},
+            {'value0': '2', 'value1': '2', '__cmd__': '2 2'},
+            {'value0': '1, 2', 'value1': '2', '__cmd__': '1, 2 2'}
+        ]
+        assert_that(list(group.iter_specs()), contains_inanyorder(*expected))
