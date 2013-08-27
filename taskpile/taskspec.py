@@ -20,6 +20,18 @@ class TaskGroupSpec(object):
             yield spec
 
     def _iter_subspecs(self, spec):
+        value_lists, spec_gens = self._split_into_value_lists_and_spec_gens(
+            spec)
+
+        for value_set in itertools.product(*value_lists.values()):
+            base = {}
+            for key, value in zip(value_lists.keys(), value_set):
+                base[key] = value
+
+            for merged in self._iter_merged_with_spec_gens(base, spec_gens):
+                yield merged
+
+    def _split_into_value_lists_and_spec_gens(self, spec):
         value_lists = {}
         spec_gens = []
         for k, v in spec.items():
@@ -29,18 +41,14 @@ class TaskGroupSpec(object):
                 value_lists[k[1:]] = v
             else:
                 value_lists[k] = [v]
+        return value_lists, spec_gens
+
+    def _iter_merged_with_spec_gens(self, base, spec_gens):
         if len(spec_gens) <= 0:
-            for value_set in itertools.product(*value_lists.values()):
-                merged = {}
-                for key, value in zip(value_lists.keys(), value_set):
-                    merged[key] = value
-                yield merged
+            yield base
         else:
             for gen in spec_gens:
                 for spec in self._iter_subspecs(gen):
-                    for value_set in itertools.product(*value_lists.values()):
-                        merged = {}
-                        for key, value in zip(value_lists.keys(), value_set):
-                            merged[key] = value
-                        merged.update(spec)
-                        yield merged
+                    merged = base.copy()
+                    merged.update(spec)
+                    yield merged
