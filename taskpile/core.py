@@ -12,6 +12,7 @@ try:
     from taskpile import _patch_multiprocessing
 except:
     import _patch_multiprocessing
+from taskpile.taskspec import TaskGroupSpec
 
 
 assert _patch_multiprocessing  # suppress unused warning
@@ -103,6 +104,11 @@ class ExternalTask(Task):
             subprocess.call, (command,), {
                 'shell': True, 'stdout': self.outbuf, 'stderr': self.errbuf},
             name, niceness=niceness)
+
+    @classmethod
+    def from_task_spec(cls, spec, niceness=0):
+        name = spec.get(TaskGroupSpec.NAME_KEY, None)
+        return ExternalTask(spec[TaskGroupSpec.CMD_KEY], name)
 
 
 class Taskpile(object):
