@@ -13,20 +13,7 @@ import urwid
 
 from taskpile.sanitize import quote_for_shell
 from taskpile.signalnames import signalnames
-from taskpile.core import State, Task, Taskpile
-
-
-class ExternalTask(Task):
-    def __init__(self, command, name=None, original_files={}, niceness=0):
-        if name is None:
-            name = command
-        self.command = command
-        self.original_files = original_files
-        self.outbuf, self.errbuf = (TemporaryFile('w+'), TemporaryFile('w+'))
-        super(ExternalTask, self).__init__(
-            subprocess.call, (command,), {
-                'shell': True, 'stdout': self.outbuf, 'stderr': self.errbuf},
-            name, niceness=niceness)
+from taskpile.core import State, Task, Taskpile, ExternalTask
 
 
 def tabbed_focus(cls):

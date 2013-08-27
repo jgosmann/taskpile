@@ -1,11 +1,17 @@
-try:
-    from taskpile import _patch_multiprocessing
-except:
-    import _patch_multiprocessing
+from __future__ import absolute_import
+
 from multiprocessing import cpu_count, Process, Value
 import os
 import signal
 import sys
+import subprocess
+from tempfile import TemporaryFile
+
+
+try:
+    from taskpile import _patch_multiprocessing
+except:
+    import _patch_multiprocessing
 
 
 assert _patch_multiprocessing  # suppress unused warning
@@ -82,6 +88,21 @@ class Task(object):
         if self.pid is not None:
             os.kill(self.pid, signal.SIGTERM)
         self._state.value = State.FINISHED
+
+
+class ExternalTask(Task):
+    # FIXME remove original_files from core ExternalTask as it is only needed
+    # for the UI
+    def __init__(self, command, name=None, original_files={}, niceness=0):
+        if name is None:
+            name = command
+        self.command = command
+        self.original_files = original_files
+        self.outbuf, self.errbuf = (TemporaryFile('w+'), TemporaryFile('w+'))
+        super(ExternalTask, self).__init__(
+            subprocess.call, (command,), {
+                'shell': True, 'stdout': self.outbuf, 'stderr': self.errbuf},
+            name, niceness=niceness)
 
 
 class Taskpile(object):
