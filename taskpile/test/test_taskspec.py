@@ -1,4 +1,5 @@
-from hamcrest import assert_that, contains, contains_inanyorder
+from hamcrest import all_of, assert_that, contains, contains_inanyorder, \
+    contains_string, has_entries
 from taskpile.taskspec import TaskGroupSpec
 
 
@@ -12,7 +13,7 @@ class TestTaskGroupSpec(object):
         expected = {
             'somekey': 'somevalue',
             '__cmd__': "somecmd --somekey 'somevalue'"}
-        assert_that(group.iter_specs(), contains(expected))
+        assert_that(group.iter_specs(), contains(has_entries(expected)))
 
     def test_can_use_sections_to_instantiate_task_specs(self):
         spec_str = '''
@@ -37,7 +38,8 @@ class TestTaskGroupSpec(object):
             {'same4all': 'same', 'task_id': 'X', 'sub': '1', '__cmd__': 'X 1'},
             {'same4all': 'same', 'task_id': '1', 'sub': 'X', '__cmd__': '1 X'}
         ]
-        assert_that(group.iter_specs(), contains_inanyorder(*expected))
+        assert_that(group.iter_specs(), contains_inanyorder(
+            *[has_entries(entries) for entries in expected]))
 
     def test_can_use_parameter_lists_to_instatiate_task_specs(self):
         spec_str = '''
@@ -54,4 +56,42 @@ class TestTaskGroupSpec(object):
             {'value0': '2', 'value1': '2', '__cmd__': '2 2'},
             {'value0': '1, 2', 'value1': '2', '__cmd__': '1, 2 2'}
         ]
-        assert_that(list(group.iter_specs()), contains_inanyorder(*expected))
+        assert_that(group.iter_specs(), contains_inanyorder(
+            *[has_entries(entries) for entries in expected]))
+
+    def test_generates_a_descriptive_name(self):
+        spec_str = '''
+            __cmd__ = cmd
+            _value0 = 1, 2
+            [multitask]
+                _value1 = 3, 4
+            [another_task]
+                value1 = 5
+            '''
+        group = TaskGroupSpec.from_spec_str(spec_str)
+        expected_names = [
+            all_of(
+                contains_string('value0=1'),
+                contains_string('value1=3'),
+                contains_string('multitask')),
+            all_of(
+                contains_string('value0=1'),
+                contains_string('value1=4'),
+                contains_string('multitask')),
+            all_of(
+                contains_string('value0=1'),
+                contains_string('another_task')),
+            all_of(
+                contains_string('value0=2'),
+                contains_string('value1=3'),
+                contains_string('multitask')),
+            all_of(
+                contains_string('value0=2'),
+                contains_string('value1=4'),
+                contains_string('multitask')),
+            all_of(
+                contains_string('value0=2'),
+                contains_string('another_task'))]
+        assert_that(
+            [s['__name__'] for s in group.iter_specs()],
+            contains_inanyorder(*expected_names))

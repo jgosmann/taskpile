@@ -6,6 +6,7 @@ from configobj import ConfigObj
 
 class TaskGroupSpec(object):
     CMD_KEY = '__cmd__'
+    NAME_KEY = '__name__'
 
     def __init__(self, group_spec):
         self.group_spec = group_spec
@@ -24,9 +25,14 @@ class TaskGroupSpec(object):
             spec)
 
         for value_set in itertools.product(*value_lists.values()):
-            base = {}
+            base = {self.NAME_KEY: ''}
             for key, value in zip(value_lists.keys(), value_set):
                 base[key] = value
+
+                if len(value_lists[key]) > 1:
+                    if len(base[self.NAME_KEY]) > 0:
+                        base[self.NAME_KEY] += ' '
+                    base[self.NAME_KEY] += '%s=%s' % (key, value)
 
             for merged in self._iter_merged_with_spec_gens(base, spec_gens):
                 yield merged
@@ -36,7 +42,7 @@ class TaskGroupSpec(object):
         spec_gens = []
         for k, v in spec.items():
             if hasattr(v, 'items'):
-                spec_gens.append(v)
+                spec_gens.append((k, v))
             elif len(k) > 1 and k[0] == '_' and k[1] != '_':
                 value_lists[k[1:]] = v
             else:
@@ -47,8 +53,10 @@ class TaskGroupSpec(object):
         if len(spec_gens) <= 0:
             yield base
         else:
-            for gen in spec_gens:
+            for name, gen in spec_gens:
                 for spec in self._iter_subspecs(gen):
                     merged = base.copy()
                     merged.update(spec)
+                    merged[self.NAME_KEY] = '%s %s: %s' % (
+                        base[self.NAME_KEY], name, merged[self.NAME_KEY])
                     yield merged
