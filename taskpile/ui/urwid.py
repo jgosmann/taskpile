@@ -6,27 +6,15 @@ import os.path
 import shlex
 import shutil
 import subprocess
-from tempfile import mkstemp, TemporaryFile
+from tempfile import mkstemp
 from weakref import WeakKeyDictionary
 
 import urwid
 
+from taskpile.core import State, Taskpile, ExternalTask
 from taskpile.sanitize import quote_for_shell
 from taskpile.signalnames import signalnames
-from taskpile.core import State, Task, Taskpile
-
-
-class ExternalTask(Task):
-    def __init__(self, command, name=None, original_files={}, niceness=0):
-        if name is None:
-            name = command
-        self.command = command
-        self.original_files = original_files
-        self.outbuf, self.errbuf = (TemporaryFile('w+'), TemporaryFile('w+'))
-        super(ExternalTask, self).__init__(
-            subprocess.call, (command,), {
-                'shell': True, 'stdout': self.outbuf, 'stderr': self.errbuf},
-            name, niceness=niceness)
+from taskpile.taskspec import TaskGroupSpec
 
 
 def tabbed_focus(cls):
@@ -284,6 +272,59 @@ class NewTaskInputs(urwid.ListBox):
             raise InputValidationError('Invalid niceness.')
 
 
+class NewTaskGroupFromSpecInputs(urwid.ListBox):
+    def __init__(self, template=None):
+        self.filename = urwid.Edit("Task spec filename: ")
+        self._filename_attr_map = urwid.AttrMap(self.filename, 'failure')
+        self.niceness = IntEditWithNegNumbers("Niceness: ", '20')
+        self._niceness_attr_map = urwid.AttrMap(self.niceness, None)
+        controls = [self._filename_attr_map, self._niceness_attr_map]
+        walker = urwid.SimpleFocusListWalker(controls)
+        urwid.connect_signal(self.filename, 'change', self._on_filename_change)
+        urwid.connect_signal(self.niceness, 'change', self._on_niceness_change)
+        super(NewTaskGroupFromSpecInputs, self).__init__(walker)
+
+    # TODO code duplication with NewTaskInputs
+    def keypress(self, size, key):
+        key = super(NewTaskGroupFromSpecInputs, self).keypress(size, key)
+        try:
+            if key == 'tab':
+                self.set_focus(
+                    self.body.next_position(self.focus_position), 'above')
+                key = None
+                self.render(size)
+            elif key == 'shift tab':
+                self.set_focus(
+                    self.body.prev_position(self.focus_position), 'below')
+                key = None
+                self.render(size)
+        except IndexError:
+            pass
+        return key
+
+    def _on_filename_change(self, w, value):
+        if os.path.isfile(value):
+            self._filename_attr_map.set_attr_map({'failure': None})
+        else:
+            self._filename_attr_map.set_attr_map({None: 'failure'})
+
+    def _on_niceness_change(self, w, value):
+        try:
+            value = int(value)
+        except ValueError:
+            self._niceness_attr_map.set_attr_map({None: 'failure'})
+            return
+        self._niceness_attr_map.set_attr_map({'failure': None})
+
+    def validate(self):
+        if not os.path.isfile(self.filename.edit_text):
+            raise InputValidationError('Not a valid file.')
+        try:
+            int(self.niceness.edit_text)
+        except ValueError:
+            raise InputValidationError('Invalid niceness.')
+
+
 class InputValidationError(Exception):
     pass
 
@@ -315,6 +356,25 @@ class NewTaskDialog(Dialog):
     name = property(get_name)
     command = property(get_command)
     original_files = property(get_original_files)
+    niceness = property(get_niceness)
+
+
+class NewTaskGroupFromSpecDialog(Dialog):
+    def __init__(self):
+        self._inputs = NewTaskGroupFromSpecInputs()
+        super(NewTaskGroupFromSpecDialog, self).__init__(
+            self._inputs, ('relative', 100), ('relative', 100))
+
+    def validate(self):
+        self._inputs.validate()
+
+    def get_filename(self):
+        return self._inputs.filename.edit_text
+
+    def get_niceness(self):
+        return int(self._inputs.niceness.edit_text)
+
+    filename = property(get_filename)
     niceness = property(get_niceness)
 
 
@@ -508,6 +568,9 @@ class TaskList(urwid.ListBox):
         elif key == 'c' and focus_widget is not None:
             self.add_task_with_dialog(NewTaskDialog(focus_widget.task))
             key = None
+        elif key == 's':
+            self.add_tasks_from_spec()
+            key = None
 
         return key
 
@@ -523,6 +586,26 @@ class TaskList(urwid.ListBox):
             except InputValidationError:
                 # FIXME show some error message
                 return True
+
+        urwid.connect_signal(dialog, 'ok', callback)
+        dialog.show()
+
+    def add_tasks_from_spec(self):
+        dialog = NewTaskGroupFromSpecDialog()
+
+        def callback():
+            try:
+                dialog.validate()
+                group_spec = TaskGroupSpec.from_spec_file(dialog.filename)
+                for spec in group_spec.iter_specs():
+                    task = ExternalTask.from_task_spec(
+                        spec, niceness=dialog.niceness)
+                    self.taskpile.enqueue(task)
+                self.update()
+            except InputValidationError:
+                # FIXME show some error message
+                return True
+            # FIXME catch spec parsing errors
 
         urwid.connect_signal(dialog, 'ok', callback)
         dialog.show()
@@ -545,6 +628,7 @@ class Sidebar(urwid.Pile):
 Keys:
 a: Add new task
 c: Copy selected task
+s: Create tasks from spec
 k: Kill selected task
 q: Quit
 """.strip())),

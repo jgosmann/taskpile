@@ -1,11 +1,20 @@
-try:
-    from taskpile import _patch_multiprocessing
-except:
-    import _patch_multiprocessing
+from __future__ import absolute_import
+
 from multiprocessing import cpu_count, Process, Value
 import os
 import signal
 import sys
+import subprocess
+import string
+from tempfile import mkstemp, TemporaryFile
+
+
+try:
+    from taskpile import _patch_multiprocessing
+except:
+    import _patch_multiprocessing
+from taskpile.sanitize import quote_for_shell
+from taskpile.taskspec import TaskGroupSpec
 
 
 assert _patch_multiprocessing  # suppress unused warning
@@ -82,6 +91,61 @@ class Task(object):
         if self.pid is not None:
             os.kill(self.pid, signal.SIGTERM)
         self._state.value = State.FINISHED
+
+
+class TemplateFileFormatter(string.Formatter):
+    def __init__(self, task_spec):
+        super(TemplateFileFormatter, self).__init__()
+        self.task_spec = task_spec
+        self.original_files = {}
+
+    def parse(self, format_string):
+        for literal_text, field_name, format_spec, conversion in super(
+                TemplateFileFormatter, self).parse(format_string):
+            if conversion is not None and conversion is not 't':
+                if format_spec != '':
+                    format_spec = ':' + format_spec
+                literal_text = '{}{{{}!{}{}}}'.format(
+                    literal_text, field_name, conversion, format_spec)
+                field_name = format_spec = conversion = None
+            yield literal_text, field_name, format_spec, conversion
+
+    def convert_field(self, value, conversion):
+        if conversion != 't':
+            return super(TemplateFileFormatter, self).convert_field(
+                value, conversion)
+
+        fd, new_filename = mkstemp()
+        try:
+            self.original_files[new_filename] = value
+            with open(value, 'r') as template:
+                for line in template:
+                    os.write(fd, line.format(**self.task_spec))
+        finally:
+            os.close(fd)
+        return quote_for_shell(new_filename)
+
+
+class ExternalTask(Task):
+    # FIXME remove original_files from core ExternalTask as it is only needed
+    # for the UI
+    def __init__(self, command, name=None, original_files={}, niceness=0):
+        if name is None:
+            name = command
+        self.command = command
+        self.original_files = original_files
+        self.outbuf, self.errbuf = (TemporaryFile('w+'), TemporaryFile('w+'))
+        super(ExternalTask, self).__init__(
+            subprocess.call, (command,), {
+                'shell': True, 'stdout': self.outbuf, 'stderr': self.errbuf},
+            name, niceness=niceness)
+
+    @classmethod
+    def from_task_spec(cls, spec, niceness=0):
+        name = spec.get(TaskGroupSpec.NAME_KEY, None)
+        formatter = TemplateFileFormatter(spec)
+        cmd = formatter.format(spec[TaskGroupSpec.CMD_KEY], **spec)
+        return ExternalTask(cmd, name, original_files=formatter.original_files)
 
 
 class Taskpile(object):

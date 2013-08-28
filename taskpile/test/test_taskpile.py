@@ -3,17 +3,19 @@ from multiprocessing import Pipe, Process
 from multiprocessing.reduction import reduce_connection
 import os
 import pickle
+import tempfile
 import time
 
-from hamcrest import assert_that, contains, described_as, \
-    greater_than_or_equal_to, has_entries, is_, is_not
+from hamcrest import all_of, assert_that, contains, described_as, \
+    greater_than_or_equal_to, has_entries, has_property, is_, is_not
 try:
     from unittest.mock import patch, MagicMock
 except:
     from mock import patch, MagicMock
 from nose import SkipTest
 
-from taskpile.core import State, Task, Taskpile
+from matcher import file_with_content
+from taskpile.core import ExternalTask, State, Task, Taskpile
 
 
 def run_in_process(connection, function, *args, **kwargs):
@@ -254,6 +256,55 @@ class TestTask(object):
         task = Task(noop)
         task.terminate()
         task.join()
+
+
+class TestExternalTask(object):
+    # TODO basically external task functionality is not tested, yet
+    # (except the creation from task specs)
+
+    def test_can_be_created_from_task_spec(self):
+        spec = {'__cmd__': 'cmd', '__name__': 'foo'}
+        task = ExternalTask.from_task_spec(spec)
+        assert_that(task, all_of(
+            has_property('command', 'cmd'), has_property('name', 'foo')))
+
+    def test_handles_config_template_files(self):
+        fd, filename = tempfile.mkstemp()
+        try:
+            os.write(fd, b'# conf\nsetting = {somevar}\nfoo = bar\n')
+            os.close(fd)
+
+            spec = {
+                '__cmd__': '{config_template!t}',
+                '__name__': 'foo',
+                'somevar': 'somevalue',
+                'config_template': filename
+            }
+            task = ExternalTask.from_task_spec(spec)
+            assert_that(task.command, is_not(filename))
+            try:
+                assert_that(task.command, is_(file_with_content(
+                    b'# conf\nsetting = somevalue\nfoo = bar\n')))
+            finally:
+                os.unlink(task.command)
+        finally:
+            os.unlink(filename)
+
+    def test_sets_original_files_for_template_files(self):
+        fd, filename = tempfile.mkstemp()
+        try:
+            os.write(fd, b'# conf')
+            os.close(fd)
+
+            spec = {
+                '__cmd__': '{config_template!t}',
+                'config_template': filename
+            }
+            task = ExternalTask.from_task_spec(spec)
+            os.unlink(task.command)
+            assert_that(task.original_files[task.command], is_(filename))
+        finally:
+            os.unlink(filename)
 
 
 class TestTaskpile(object):
