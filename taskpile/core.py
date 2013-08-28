@@ -97,6 +97,7 @@ class TemplateFileFormatter(string.Formatter):
     def __init__(self, task_spec):
         super(TemplateFileFormatter, self).__init__()
         self.task_spec = task_spec
+        self.original_files = {}
 
     def parse(self, format_string):
         for literal_text, field_name, format_spec, conversion in super(
@@ -116,6 +117,7 @@ class TemplateFileFormatter(string.Formatter):
 
         fd, new_filename = mkstemp()
         try:
+            self.original_files[new_filename] = value
             with open(value, 'r') as template:
                 for line in template:
                     os.write(fd, line.format(**self.task_spec))
@@ -143,7 +145,7 @@ class ExternalTask(Task):
         name = spec.get(TaskGroupSpec.NAME_KEY, None)
         formatter = TemplateFileFormatter(spec)
         cmd = formatter.format(spec[TaskGroupSpec.CMD_KEY], **spec)
-        return ExternalTask(cmd, name)
+        return ExternalTask(cmd, name, original_files=formatter.original_files)
 
 
 class Taskpile(object):

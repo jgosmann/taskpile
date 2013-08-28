@@ -290,6 +290,22 @@ class TestExternalTask(object):
         finally:
             os.unlink(filename)
 
+    def test_sets_original_files_for_template_files(self):
+        fd, filename = tempfile.mkstemp()
+        try:
+            os.write(fd, b'# conf')
+            os.close(fd)
+
+            spec = {
+                '__cmd__': '{config_template!t}',
+                'config_template': filename
+            }
+            task = ExternalTask.from_task_spec(spec)
+            os.unlink(task.command)
+            assert_that(task.original_files[task.command], is_(filename))
+        finally:
+            os.unlink(filename)
+
 
 class TestTaskpile(object):
     def setUp(self):
