@@ -95,3 +95,14 @@ class TestTaskGroupSpec(object):
         assert_that(
             [s['__name__'] for s in group.iter_specs()],
             contains_inanyorder(*expected_names))
+
+    def test_leaves_template_file_replacements_unchanged(self):
+        spec_str = '''
+            __cmd__ = cmd {config_template!t}
+            config_template = ./somefile
+            '''
+        group = TaskGroupSpec.from_spec_str(spec_str)
+        expected = {
+            'config_template': './somefile',
+            '__cmd__': "cmd {config_template!t}"}
+        assert_that(group.iter_specs(), contains(has_entries(expected)))

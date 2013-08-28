@@ -1,12 +1,28 @@
 import itertools
+import string
 from StringIO import StringIO
 
 from configobj import ConfigObj
 
 
+class TaskSpecCmdFormatter(string.Formatter):
+    def parse(self, format_string):
+        for literal_text, field_name, format_spec, conversion in super(
+                TaskSpecCmdFormatter, self).parse(format_string):
+            if conversion == 't':
+                if format_spec != '':
+                    format_spec = ':' + format_spec
+                literal_text = '{}{{{}!{}{}}}'.format(
+                    literal_text, field_name, conversion, format_spec)
+                field_name = format_spec = conversion = None
+            yield literal_text, field_name, format_spec, conversion
+
+
 class TaskGroupSpec(object):
     CMD_KEY = '__cmd__'
     NAME_KEY = '__name__'
+
+    __cmd_formatter = TaskSpecCmdFormatter()
 
     def __init__(self, group_spec):
         self.group_spec = group_spec
@@ -17,7 +33,8 @@ class TaskGroupSpec(object):
 
     def iter_specs(self):
         for spec in self._iter_subspecs(self.group_spec):
-            spec[self.CMD_KEY] = spec[self.CMD_KEY].format(**spec)
+            spec[self.CMD_KEY] = self.__cmd_formatter.format(
+                spec[self.CMD_KEY], **spec)
             yield spec
 
     def _iter_subspecs(self, spec):
