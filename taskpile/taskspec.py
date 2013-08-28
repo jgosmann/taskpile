@@ -4,6 +4,8 @@ from StringIO import StringIO
 
 from configobj import ConfigObj
 
+from sanitize import quote_for_shell
+
 
 class TaskSpecCmdFormatter(string.Formatter):
     def parse(self, format_string):
@@ -16,6 +18,13 @@ class TaskSpecCmdFormatter(string.Formatter):
                     literal_text, field_name, conversion, format_spec)
                 field_name = format_spec = conversion = None
             yield literal_text, field_name, format_spec, conversion
+
+    def convert_field(self, value, conversion):
+        if conversion == 'q':
+            return quote_for_shell(value)
+        else:
+            return super(TaskSpecCmdFormatter, self).convert_field(
+                value, conversion)
 
 
 class TaskGroupSpec(object):

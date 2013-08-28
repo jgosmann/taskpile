@@ -1,5 +1,5 @@
 from hamcrest import all_of, assert_that, contains, contains_inanyorder, \
-    contains_string, has_entries
+    contains_string, has_entries, is_
 from taskpile.taskspec import TaskGroupSpec
 
 
@@ -106,3 +106,12 @@ class TestTaskGroupSpec(object):
             'config_template': './somefile',
             '__cmd__': "cmd {config_template!t}"}
         assert_that(group.iter_specs(), contains(has_entries(expected)))
+
+    def test_can_quote_for_shell(self):
+        spec_str = '''
+            __cmd__ = cmd {quotethis!q}
+            quotethis = """some string'"""
+            '''
+        group = TaskGroupSpec.from_spec_str(spec_str)
+        assert_that(group.iter_specs().next()['__cmd__'], is_(
+            'cmd \'some string\'"\'"\'\''))
