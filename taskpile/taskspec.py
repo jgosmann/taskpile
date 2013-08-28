@@ -17,7 +17,7 @@ class TaskGroupSpec(object):
 
     def iter_specs(self):
         for spec in self._iter_subspecs(self.group_spec):
-            spec[self.CMD_KEY] %= spec
+            spec[self.CMD_KEY] = spec[self.CMD_KEY].format(**spec)
             yield spec
 
     def _iter_subspecs(self, spec):

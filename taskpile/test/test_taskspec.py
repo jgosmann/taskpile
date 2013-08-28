@@ -7,7 +7,7 @@ class TestTaskGroupSpec(object):
     def test_replaces_spec_vars_in_cmd_spec(self):
         spec_str = '''
             somekey = somevalue
-            __cmd__ = somecmd --somekey %(somekey)r
+            __cmd__ = somecmd --somekey {somekey!r}
             '''
         group = TaskGroupSpec.from_spec_str(spec_str)
         expected = {
@@ -17,7 +17,7 @@ class TestTaskGroupSpec(object):
 
     def test_can_use_sections_to_instantiate_task_specs(self):
         spec_str = '''
-            __cmd__ = %(task_id)s %(sub)s
+            __cmd__ = {task_id} {sub}
             same4all = same
 
             [task 0]
@@ -43,7 +43,7 @@ class TestTaskGroupSpec(object):
 
     def test_can_use_parameter_lists_to_instatiate_task_specs(self):
         spec_str = '''
-            __cmd__ = %(value0)s %(value1)s
+            __cmd__ = {value0} {value1}
             _value0 = 1, 2, '1, 2'
             _value1 = 1, 2
             '''
