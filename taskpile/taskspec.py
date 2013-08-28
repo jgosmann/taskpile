@@ -87,6 +87,6 @@ class TaskGroupSpec(object):
                 for spec in self._iter_subspecs(gen):
                     merged = base.copy()
                     merged.update(spec)
-                    merged[self.NAME_KEY] = '{0} {1}: {2}'.format(
+                    merged[self.NAME_KEY] = '{0}_{1}_{2}'.format(
                         base[self.NAME_KEY], name, merged[self.NAME_KEY])
                     yield merged
