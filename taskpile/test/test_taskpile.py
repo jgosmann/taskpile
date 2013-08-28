@@ -3,6 +3,7 @@ from multiprocessing import Pipe, Process
 from multiprocessing.reduction import reduce_connection
 import os
 import pickle
+import tempfile
 import time
 
 from hamcrest import all_of, assert_that, contains, described_as, \
@@ -13,6 +14,7 @@ except:
     from mock import patch, MagicMock
 from nose import SkipTest
 
+from matcher import file_with_content
 from taskpile.core import ExternalTask, State, Task, Taskpile
 
 
@@ -265,6 +267,28 @@ class TestExternalTask(object):
         task = ExternalTask.from_task_spec(spec)
         assert_that(task, all_of(
             has_property('command', 'cmd'), has_property('name', 'foo')))
+
+    def test_handles_config_template_files(self):
+        fd, filename = tempfile.mkstemp()
+        try:
+            os.write(fd, b'# conf\nsetting = {somevar}\nfoo = bar\n')
+            os.close(fd)
+
+            spec = {
+                '__cmd__': '{config_template!t}',
+                '__name__': 'foo',
+                'somevar': 'somevalue',
+                'config_template': filename
+            }
+            task = ExternalTask.from_task_spec(spec)
+            assert_that(task.command, is_not(filename))
+            try:
+                assert_that(task.command, is_(file_with_content(
+                    b'# conf\nsetting = somevalue\nfoo = bar\n')))
+            finally:
+                os.unlink(task.command)
+        finally:
+            os.unlink(filename)
 
 
 class TestTaskpile(object):

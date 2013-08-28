@@ -5,13 +5,15 @@ import os
 import signal
 import sys
 import subprocess
-from tempfile import TemporaryFile
+import string
+from tempfile import mkstemp, TemporaryFile
 
 
 try:
     from taskpile import _patch_multiprocessing
 except:
     import _patch_multiprocessing
+from taskpile.sanitize import quote_for_shell
 from taskpile.taskspec import TaskGroupSpec
 
 
@@ -91,6 +93,37 @@ class Task(object):
         self._state.value = State.FINISHED
 
 
+class TemplateFileFormatter(string.Formatter):
+    def __init__(self, task_spec):
+        super(TemplateFileFormatter, self).__init__()
+        self.task_spec = task_spec
+
+    def parse(self, format_string):
+        for literal_text, field_name, format_spec, conversion in super(
+                TemplateFileFormatter, self).parse(format_string):
+            if conversion is not None and conversion is not 't':
+                if format_spec != '':
+                    format_spec = ':' + format_spec
+                literal_text = '{}{{{}!{}{}}}'.format(
+                    literal_text, field_name, conversion, format_spec)
+                field_name = format_spec = conversion = None
+            yield literal_text, field_name, format_spec, conversion
+
+    def convert_field(self, value, conversion):
+        if conversion != 't':
+            return super(TemplateFileFormatter, self).convert_field(
+                value, conversion)
+
+        fd, new_filename = mkstemp()
+        try:
+            with open(value, 'r') as template:
+                for line in template:
+                    os.write(fd, line.format(**self.task_spec))
+        finally:
+            os.close(fd)
+        return quote_for_shell(new_filename)
+
+
 class ExternalTask(Task):
     # FIXME remove original_files from core ExternalTask as it is only needed
     # for the UI
@@ -108,7 +141,9 @@ class ExternalTask(Task):
     @classmethod
     def from_task_spec(cls, spec, niceness=0):
         name = spec.get(TaskGroupSpec.NAME_KEY, None)
-        return ExternalTask(spec[TaskGroupSpec.CMD_KEY], name)
+        formatter = TemplateFileFormatter(spec)
+        cmd = formatter.format(spec[TaskGroupSpec.CMD_KEY], **spec)
+        return ExternalTask(cmd, name)
 
 
 class Taskpile(object):
