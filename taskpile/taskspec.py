@@ -31,6 +31,10 @@ class TaskGroupSpec(object):
     def from_spec_str(cls, spec_str):
         return cls(ConfigObj(StringIO(spec_str), interpolation=False))
 
+    @classmethod
+    def from_spec_file(cls, filename):
+        return cls(ConfigObj(filename, interpolation=False))
+
     def iter_specs(self):
         for spec in self._iter_subspecs(self.group_spec):
             spec[self.CMD_KEY] = self.__cmd_formatter.format(
