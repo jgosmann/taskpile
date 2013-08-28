@@ -634,6 +634,11 @@ q: Quit
 """.strip())),
             ('pack', urwid.Divider())
         ]
+
+        if os.environ.get('STY', '') == '':
+            controls.append(('pack', urwid.Text(
+                ('failure', "Not running in screen!"))))
+
         super(Sidebar, self).__init__(controls)
 
     def _on_max_jobs_changed(self, w, value):
