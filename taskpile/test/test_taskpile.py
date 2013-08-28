@@ -5,15 +5,15 @@ import os
 import pickle
 import time
 
-from hamcrest import assert_that, contains, described_as, \
-    greater_than_or_equal_to, has_entries, is_, is_not
+from hamcrest import all_of, assert_that, contains, described_as, \
+    greater_than_or_equal_to, has_entries, has_property, is_, is_not
 try:
     from unittest.mock import patch, MagicMock
 except:
     from mock import patch, MagicMock
 from nose import SkipTest
 
-from taskpile.core import State, Task, Taskpile
+from taskpile.core import ExternalTask, State, Task, Taskpile
 
 
 def run_in_process(connection, function, *args, **kwargs):
@@ -254,6 +254,17 @@ class TestTask(object):
         task = Task(noop)
         task.terminate()
         task.join()
+
+
+class TestExternalTask(object):
+    # TODO basically external task functionality is not tested, yet
+    # (except the creation from task specs)
+
+    def test_can_be_created_from_task_spec(self):
+        spec = {'__cmd__': 'cmd', '__name__': 'foo'}
+        task = ExternalTask.from_task_spec(spec)
+        assert_that(task, all_of(
+            has_property('command', 'cmd'), has_property('name', 'foo')))
 
 
 class TestTaskpile(object):
