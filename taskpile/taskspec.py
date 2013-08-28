@@ -32,7 +32,7 @@ class TaskGroupSpec(object):
                 if len(value_lists[key]) > 1:
                     if len(base[self.NAME_KEY]) > 0:
                         base[self.NAME_KEY] += ' '
-                    base[self.NAME_KEY] += '%s=%s' % (key, value)
+                    base[self.NAME_KEY] += '{0}={1}'.format(key, value)
 
             for merged in self._iter_merged_with_spec_gens(base, spec_gens):
                 yield merged
@@ -57,6 +57,6 @@ class TaskGroupSpec(object):
                 for spec in self._iter_subspecs(gen):
                     merged = base.copy()
                     merged.update(spec)
-                    merged[self.NAME_KEY] = '%s %s: %s' % (
+                    merged[self.NAME_KEY] = '{0} {1}: {2}'.format(
                         base[self.NAME_KEY], name, merged[self.NAME_KEY])
                     yield merged
