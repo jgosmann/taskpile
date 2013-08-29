@@ -668,11 +668,18 @@ class MainWindow(urwid.WidgetPlaceholder):
             key = self.tasklist.add_task_with_dialog(NewTaskDialog())
         return key
 
+    def _clean_files_of_finished_processes(self):
+        for task in self.taskpile.finished:
+            for filename in task.original_files:
+                if os.path.isfile(filename):
+                    os.unlink(filename)
+
     def on_quit_requested(self):
         def terminate_all_and_quit():
             for task in self.taskpile.pending + self.taskpile.running:
                 task.terminate()
                 task.join()
+            self._clean_files_of_finished_processes()
             raise urwid.ExitMainLoop()
 
         confirm_diag = Dialog(urwid.Filler(urwid.Padding(urwid.Text(
