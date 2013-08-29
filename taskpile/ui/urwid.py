@@ -97,12 +97,12 @@ class Dialog(ModalWidget):
         self._signal_map = {self._ok_btn: 'ok', self._cancel_btn: 'cancel'}
 
     def _on_btn_click(self, btn):
+        self.hide()
         try:
             if urwid.emit_signal(self, self._signal_map[btn]):
                 return
         except KeyError:
             pass
-        self.hide()
 
     def keypress(self, size, key):
         key = super(Dialog, self).keypress(size, key)
@@ -278,7 +278,9 @@ class NewTaskGroupFromSpecInputs(urwid.ListBox):
         self._filename_attr_map = urwid.AttrMap(self.filename, 'failure')
         self.niceness = IntEditWithNegNumbers("Niceness: ", '20')
         self._niceness_attr_map = urwid.AttrMap(self.niceness, None)
-        controls = [self._filename_attr_map, self._niceness_attr_map]
+        self.error = urwid.Text('')
+        controls = [
+            self._filename_attr_map, self._niceness_attr_map, self.error]
         walker = urwid.SimpleFocusListWalker(controls)
         urwid.connect_signal(self.filename, 'change', self._on_filename_change)
         urwid.connect_signal(self.niceness, 'change', self._on_niceness_change)
@@ -374,8 +376,15 @@ class NewTaskGroupFromSpecDialog(Dialog):
     def get_niceness(self):
         return int(self._inputs.niceness.edit_text)
 
+    def get_error(self):
+        return self._inputs.error.text
+
+    def set_error(self, msg):
+        self._inputs.error.set_text(msg)
+
     filename = property(get_filename)
     niceness = property(get_niceness)
+    error = property(get_error, set_error)
 
 
 class TaskView(urwid.AttrMap):
@@ -602,10 +611,14 @@ class TaskList(urwid.ListBox):
                         spec, niceness=dialog.niceness)
                     self.taskpile.enqueue(task)
                 self.update()
-            except InputValidationError:
-                # FIXME show some error message
-                return True
-            # FIXME catch spec parsing errors
+            except Exception as err:
+                msg = 'Error: '
+                if isinstance(err, KeyError):
+                    msg += 'Undefined replacement key {}'.format(str(err))
+                else:
+                    msg += str(err)
+                dialog.error = msg
+                dialog.show()
 
         urwid.connect_signal(dialog, 'ok', callback)
         dialog.show()
