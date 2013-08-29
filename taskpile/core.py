@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+import errno
 from multiprocessing import cpu_count, Process, Value
 import os
 import signal
@@ -56,8 +57,13 @@ class Task(object):
             target=self.__run,
             args=(self._state, self.niceness, self.function) + self.args,
             kwargs=self.kwargs)
-        process.start()
-        self._pid = process.pid
+        try:
+            process.start()
+        except OSError as err:
+            if err.errno != errno.EDEADLK:
+                raise err
+        else:
+            self._pid = process.pid
 
     @staticmethod
     def __run(state_var, niceness, function, *args, **kwargs):
