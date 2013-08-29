@@ -89,9 +89,13 @@ class Task(object):
 
     def join(self):
         if self.pid is not None:
-            opid, exit_status_indication = os.waitpid(self.pid, 0)
-            self._exitsignal = exit_status_indication & 0xff
-            self._exitcode = exit_status_indication >> 8
+            try:
+                opid, exit_status_indication = os.waitpid(self.pid, 0)
+                self._exitsignal = exit_status_indication & 0xff
+                self._exitcode = exit_status_indication >> 8
+            except OSError as err:
+                if err.errno != errno.ECHILD:
+                    raise err
 
     def terminate(self):
         if self.pid is not None:
