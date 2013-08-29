@@ -186,7 +186,10 @@ class Taskpile(object):
             task = self.running.pop()
             task.stop()
             self.pending.insert(0, task)
-        while len(self.pending) > 0 and len(self.running) < self.max_parallel:
+        # Start at most one process at once. Otherwise, we can easily run
+        # in race conditions in the programs started and alike.
+        # There also seems to be a race condition in Python itself.
+        if len(self.pending) > 0 and len(self.running) < self.max_parallel:
             task = self.pending.pop(0)
             if task.state == State.STOPPED:
                 task.cont()
