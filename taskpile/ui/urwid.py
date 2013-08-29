@@ -663,11 +663,29 @@ class MainWindow(urwid.WidgetPlaceholder):
     def keypress(self, size, key):
         key = super(MainWindow, self).keypress(size, key)
         if key == 'q':
-            # FIXME do not exit if processes still running
-            raise urwid.ExitMainLoop()
+            self.on_quit_requested()
         elif key == 'a':
             key = self.tasklist.add_task_with_dialog(NewTaskDialog())
         return key
+
+    def on_quit_requested(self):
+        def terminate_all_and_quit():
+            for task in self.taskpile.pending + self.taskpile.running:
+                task.terminate()
+                task.join()
+            raise urwid.ExitMainLoop()
+
+        confirm_diag = Dialog(urwid.Filler(urwid.Padding(urwid.Text(
+            "Are you sure, that you want to exit and kill all tasks?"))),
+            ('relative', 75), ('relative', 25),
+            'Yes', 'No')
+        urwid.connect_signal(confirm_diag, 'ok', terminate_all_and_quit)
+        processes_unfinished = len(self.taskpile.pending) > 0 or \
+            len(self.taskpile.running) > 0
+        if processes_unfinished:
+            confirm_diag.show()
+        else:
+            terminate_all_and_quit()
 
     def update(self):
         self.tasklist.update()
