@@ -456,15 +456,21 @@ class FileWalker(urwid.ListWalker):
     def __init__(self, file):
         self.file = file
         self.focus = 0
+        self.linepos = [0]
         super(FileWalker, self).__init__()
         self.move_to_end()
 
     def __getitem__(self, position):
-        self.file.seek(0, 0)
-        for i in range(position + 1):
+        if position < len(self.linepos):
+            self.file.seek(self.linepos[position], 0)
+        else:
+            self.file.seek(self.linepos[-1], 0)
+        for i in range(len(self.linepos), position + 1):
             line = self.file.readline()
             if line == '':
                 raise IndexError()
+            self.linepos.append(self.file.tell())
+        line = self.file.readline()
         return urwid.Text(line.rstrip())
 
     def next_position(self, position):
