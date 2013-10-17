@@ -30,6 +30,7 @@ class TaskSpecCmdFormatter(string.Formatter):
 class TaskGroupSpec(object):
     CMD_KEY = '__cmd__'
     NAME_KEY = '__name__'
+    REPEAT_KEY = '__repeat__'
 
     __cmd_formatter = TaskSpecCmdFormatter()
 
@@ -44,11 +45,13 @@ class TaskGroupSpec(object):
     def from_spec_file(cls, filename):
         return cls(ConfigObj(filename, interpolation=False))
 
-    def iter_specs(self):
-        for spec in self._iter_subspecs(self.group_spec):
-            spec[self.CMD_KEY] = self.__cmd_formatter.format(
-                spec[self.CMD_KEY], **spec)
-            yield spec
+    def iter_specs(self, num_repeats):
+        for repeat in xrange(num_repeats):
+            for spec in self._iter_subspecs(self.group_spec):
+                spec[self.REPEAT_KEY] = repeat
+                spec[self.CMD_KEY] = self.__cmd_formatter.format(
+                    spec[self.CMD_KEY], **spec)
+                yield spec
 
     def _iter_subspecs(self, spec):
         value_lists, spec_gens = self._split_into_value_lists_and_spec_gens(

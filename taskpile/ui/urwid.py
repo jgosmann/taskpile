@@ -278,12 +278,17 @@ class NewTaskGroupFromSpecInputs(urwid.ListBox):
         self._filename_attr_map = urwid.AttrMap(self.filename, 'failure')
         self.niceness = IntEditWithNegNumbers("Niceness: ", '20')
         self._niceness_attr_map = urwid.AttrMap(self.niceness, None)
+        self.num_repeats = urwid.IntEdit("Repeats: ", '1')
+        self._num_repeats_attr_map = urwid.AttrMap(self.num_repeats, None)
         self.error = urwid.Text('')
         controls = [
-            self._filename_attr_map, self._niceness_attr_map, self.error]
+            self._filename_attr_map, self._niceness_attr_map,
+            self._num_repeats_attr_map, self.error]
         walker = urwid.SimpleFocusListWalker(controls)
         urwid.connect_signal(self.filename, 'change', self._on_filename_change)
         urwid.connect_signal(self.niceness, 'change', self._on_niceness_change)
+        urwid.connect_signal(
+            self.num_repeats, 'change', self._on_num_repeats_change)
         super(NewTaskGroupFromSpecInputs, self).__init__(walker)
 
     # TODO code duplication with NewTaskInputs
@@ -318,11 +323,20 @@ class NewTaskGroupFromSpecInputs(urwid.ListBox):
             return
         self._niceness_attr_map.set_attr_map({'failure': None})
 
+    def _on_num_repeats_change(self, w, value):
+        try:
+            value = int(value)
+        except ValueError:
+            self._num_repeats_attr_map.set_attr_map({None: 'failure'})
+            return
+        self._num_repeats_attr_map.set_attr_map({'failure': None})
+
     def validate(self):
         if not os.path.isfile(self.filename.edit_text):
             raise InputValidationError('Not a valid file.')
         try:
             int(self.niceness.edit_text)
+            int(self.num_repeats.edit_text)
         except ValueError:
             raise InputValidationError('Invalid niceness.')
 
@@ -376,6 +390,9 @@ class NewTaskGroupFromSpecDialog(Dialog):
     def get_niceness(self):
         return int(self._inputs.niceness.edit_text)
 
+    def get_num_repeats(self):
+        return int(self._inputs.num_repeats.edit_text)
+
     def get_error(self):
         return self._inputs.error.text
 
@@ -384,6 +401,7 @@ class NewTaskGroupFromSpecDialog(Dialog):
 
     filename = property(get_filename)
     niceness = property(get_niceness)
+    num_repeats = property(get_num_repeats)
     error = property(get_error, set_error)
 
 
@@ -612,7 +630,7 @@ class TaskList(urwid.ListBox):
             try:
                 dialog.validate()
                 group_spec = TaskGroupSpec.from_spec_file(dialog.filename)
-                for spec in group_spec.iter_specs():
+                for spec in group_spec.iter_specs(dialog.num_repeats):
                     task = ExternalTask.from_task_spec(
                         spec, niceness=dialog.niceness)
                     self.taskpile.enqueue(task)
