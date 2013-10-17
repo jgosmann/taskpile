@@ -593,7 +593,9 @@ class TaskList(urwid.ListBox):
         if key is None:
             return key
 
-        if key == 'enter' and focus_widget is not None:
+        selected_process_started = focus_widget is not None and \
+            focus_widget.task.pid is not None
+        if key == 'enter' and selected_process_started:
             outbuf = open(focus_widget.task.outbuf_name)
             errbuf = open(focus_widget.task.errbuf_name)
             IOView(
