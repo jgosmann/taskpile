@@ -590,10 +590,12 @@ class TaskList(urwid.ListBox):
             return key
 
         if key == 'enter' and focus_widget is not None:
-            IOView(
-                "Output of task '%s' (%i)" %
-                (focus_widget.task.name, focus_widget.task.pid),
-                focus_widget.task.outbuf, focus_widget.task.errbuf).show()
+            with open(focus_widget.task.outbuf.name) as outbuf, \
+                    open(focus_widget.task.errbuf) as errbuf:
+                IOView(
+                    "Output of task '%s' (%i)" %
+                    (focus_widget.task.name, focus_widget.task.pid),
+                    outbuf, errbuf).show()
             key = None
         elif key == 'a':
             self.add_task_with_dialog(NewTaskDialog())

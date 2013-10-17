@@ -134,11 +134,22 @@ class ExternalTask(Task):
             name = command
         self.command = command
         self.original_files = original_files
-        self.outbuf, self.errbuf = (TemporaryFile('w+'), TemporaryFile('w+'))
         super(ExternalTask, self).__init__(
             subprocess.call, (command,), {
                 'shell': True, 'stdout': self.outbuf, 'stderr': self.errbuf},
             name, niceness=niceness)
+
+    def invoke(self):
+        self.outbuf, self.errbuf = \
+            (NamedTemporaryFile('w'), NamedTemporaryFile('w'))
+        try:
+            subprocess.call(
+                self.command, shell=True, stdout=self.outbuf,
+                stderr=self.errbuf)
+        finally:
+            self.outbuf.close()
+            self.errbuf.close()
+
 
     @classmethod
     def from_task_spec(cls, spec, niceness=0):
