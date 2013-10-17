@@ -514,6 +514,8 @@ class FileWalker(urwid.ListWalker):
 
 class IOView(ModalWidget):
     def __init__(self, title, stdout, stderr):
+        self.stdout_file = stdout
+        self.stderr_file = stderr
         self.stdout = urwid.ListBox(FileWalker(stdout))
         self.stderr = urwid.ListBox(FileWalker(stderr))
 
@@ -551,6 +553,8 @@ class IOView(ModalWidget):
             self.textview.original_widget = self.stderr
 
     def on_back_btn_click(self, btn):
+        self.stdout_file.close()
+        self.stderr_file.close()
         self.hide()
 
 
@@ -590,12 +594,12 @@ class TaskList(urwid.ListBox):
             return key
 
         if key == 'enter' and focus_widget is not None:
-            with open(focus_widget.task.outbuf.name) as outbuf, \
-                    open(focus_widget.task.errbuf) as errbuf:
-                IOView(
-                    "Output of task '%s' (%i)" %
-                    (focus_widget.task.name, focus_widget.task.pid),
-                    outbuf, errbuf).show()
+            outbuf = open(focus_widget.task.outbuf_name)
+            errbuf = open(focus_widget.task.errbuf_name)
+            IOView(
+                "Output of task '%s' (%i)" %
+                (focus_widget.task.name, focus_widget.task.pid),
+                outbuf, errbuf).show()
             key = None
         elif key == 'a':
             self.add_task_with_dialog(NewTaskDialog())

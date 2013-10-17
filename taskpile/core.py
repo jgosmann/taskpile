@@ -6,7 +6,7 @@ import signal
 import sys
 import subprocess
 import string
-from tempfile import mkstemp, TemporaryFile
+from tempfile import mkstemp, NamedTemporaryFile
 
 
 try:
@@ -134,22 +134,22 @@ class ExternalTask(Task):
             name = command
         self.command = command
         self.original_files = original_files
-        super(ExternalTask, self).__init__(
-            subprocess.call, (command,), {
-                'shell': True, 'stdout': self.outbuf, 'stderr': self.errbuf},
-            name, niceness=niceness)
+        super(ExternalTask, self).__init__(None, name=name, niceness=niceness)
 
-    def invoke(self):
-        self.outbuf, self.errbuf = \
-            (NamedTemporaryFile('w'), NamedTemporaryFile('w'))
-        try:
+    def start(self):
+        outbuf = NamedTemporaryFile('w', delete=False)
+        errbuf = NamedTemporaryFile('w', delete=False)
+        self.outbuf_name = outbuf.name
+        self.errbuf_name = errbuf.name
+
+        def invoke():
             subprocess.call(
-                self.command, shell=True, stdout=self.outbuf,
-                stderr=self.errbuf)
-        finally:
-            self.outbuf.close()
-            self.errbuf.close()
+                (self.command,), shell=True, stdout=outbuf, stderr=errbuf)
+            outbuf.close()
+            errbuf.close()
 
+        self.function = invoke
+        super(ExternalTask, self).start()
 
     @classmethod
     def from_task_spec(cls, spec, niceness=0):
