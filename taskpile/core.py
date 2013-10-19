@@ -150,6 +150,8 @@ class ExternalTask(Task):
 
         self.function = invoke
         super(ExternalTask, self).start()
+        outbuf.close()
+        errbuf.close()
 
     @classmethod
     def from_task_spec(cls, spec, niceness=0):
