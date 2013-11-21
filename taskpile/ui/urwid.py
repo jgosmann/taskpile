@@ -293,7 +293,7 @@ class NewTaskGroupFromSpecInputs(urwid.ListBox):
         urwid.connect_signal(
             self.num_repeats, 'change', self._on_num_repeats_change)
         urwid.connect_signal(
-            self.start_repeats, 'change', self._on_start_repeat_change)
+            self.start_repeat, 'change', self._on_start_repeat_change)
         super(NewTaskGroupFromSpecInputs, self).__init__(walker)
 
     # TODO code duplication with NewTaskInputs
@@ -338,7 +338,7 @@ class NewTaskGroupFromSpecInputs(urwid.ListBox):
         if value < int(self.start_repeat.edit_text):
             self._start_repeat_attr_map.set_attr_map({None: 'failure'})
 
-    def _on_start_repeats_change(self, w, value):
+    def _on_start_repeat_change(self, w, value):
         try:
             value = int(value)
             if value >= int(self.num_repeats.edit_text):
