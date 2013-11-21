@@ -280,15 +280,20 @@ class NewTaskGroupFromSpecInputs(urwid.ListBox):
         self._niceness_attr_map = urwid.AttrMap(self.niceness, None)
         self.num_repeats = urwid.IntEdit("Repeats: ", '1')
         self._num_repeats_attr_map = urwid.AttrMap(self.num_repeats, None)
+        self.start_repeat = urwid.IntEdit("Start repeat: ", '0')
+        self._start_repeat_attr_map = urwid.AttrMap(self.start_repeat, None)
         self.error = urwid.Text('')
         controls = [
             self._filename_attr_map, self._niceness_attr_map,
-            self._num_repeats_attr_map, self.error]
+            self._num_repeats_attr_map, self.error,
+            self._start_repeat_attr_map]
         walker = urwid.SimpleFocusListWalker(controls)
         urwid.connect_signal(self.filename, 'change', self._on_filename_change)
         urwid.connect_signal(self.niceness, 'change', self._on_niceness_change)
         urwid.connect_signal(
             self.num_repeats, 'change', self._on_num_repeats_change)
+        urwid.connect_signal(
+            self.start_repeats, 'change', self._on_start_repeat_change)
         super(NewTaskGroupFromSpecInputs, self).__init__(walker)
 
     # TODO code duplication with NewTaskInputs
@@ -326,6 +331,18 @@ class NewTaskGroupFromSpecInputs(urwid.ListBox):
     def _on_num_repeats_change(self, w, value):
         try:
             value = int(value)
+        except ValueError:
+            self._num_repeats_attr_map.set_attr_map({None: 'failure'})
+            return
+        self._num_repeats_attr_map.set_attr_map({'failure': None})
+        if value < int(self.start_repeat.edit_text):
+            self._start_repeat_attr_map.set_attr_map({None: 'failure'})
+
+    def _on_start_repeats_change(self, w, value):
+        try:
+            value = int(value)
+            if value >= int(self.num_repeats.edit_text):
+                raise ValueError()
         except ValueError:
             self._num_repeats_attr_map.set_attr_map({None: 'failure'})
             return
@@ -393,6 +410,9 @@ class NewTaskGroupFromSpecDialog(Dialog):
     def get_num_repeats(self):
         return int(self._inputs.num_repeats.edit_text)
 
+    def get_start_repeat(self):
+        return int(self._inputs.start_repeat.edit_text)
+
     def get_error(self):
         return self._inputs.error.text
 
@@ -402,6 +422,7 @@ class NewTaskGroupFromSpecDialog(Dialog):
     filename = property(get_filename)
     niceness = property(get_niceness)
     num_repeats = property(get_num_repeats)
+    start_repeat = property(get_start_repeat)
     error = property(get_error, set_error)
 
 
@@ -638,7 +659,8 @@ class TaskList(urwid.ListBox):
             try:
                 dialog.validate()
                 group_spec = TaskGroupSpec.from_spec_file(dialog.filename)
-                for spec in group_spec.iter_specs(dialog.num_repeats):
+                for spec in group_spec.iter_specs(
+                        dialog.start_repeat, dialog.num_repeats):
                     task = ExternalTask.from_task_spec(
                         spec, niceness=dialog.niceness)
                     self.taskpile.enqueue(task)

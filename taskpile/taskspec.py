@@ -45,8 +45,8 @@ class TaskGroupSpec(object):
     def from_spec_file(cls, filename):
         return cls(ConfigObj(filename, interpolation=False))
 
-    def iter_specs(self, num_repeats):
-        for repeat in xrange(num_repeats):
+    def iter_specs(self, start_repeat, num_repeats):
+        for repeat in xrange(start_repeat, num_repeats):
             for spec in self._iter_subspecs(self.group_spec):
                 spec[self.REPEAT_KEY] = repeat
                 spec[self.CMD_KEY] = self.__cmd_formatter.format(
